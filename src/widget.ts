@@ -15,12 +15,13 @@ import { renderProgress, statusLine } from "./render.ts";
 const WIDGET_KEY = "pi-nix-build";
 export const TOGGLE_KEY = "ctrl+shift+b";
 export const DETAILS_KEY = "ctrl+shift+m";
-/** Below this, hints are dropped instead of squeezing the command further. */
+/** Below this, the details button is dropped instead of squeezing the command further. */
 const MIN_TEXT_WIDTH = 20;
 /** Upper bounds for the rows below a build's status line. */
 const MAX_BODY_ROWS = { collapsed: 10, expanded: 30 };
 const HINT_GAP = "  ";
-const HINT_SEPARATOR = " · ";
+const DETAILS_BUTTON_ICON = "⤢";
+const DETAILS_BUTTON = `${DETAILS_BUTTON_ICON} details`;
 
 type Action = "toggle" | "details";
 
@@ -181,71 +182,73 @@ export class ProgressWidget {
         const lines: string[] = [];
         this.hints = [];
 
-        /** Draws hints at `column` of the next line and records where they landed. */
-        const hintsAt = (column: number, live: LiveRun, hints: [Action, string][]) => {
-          let x = column;
-          return hints
-            .map(([action, text]) => {
-              const start = x;
-              x += visibleWidth(text) + HINT_SEPARATOR.length;
-              const row = lines.length;
-              if (!clickable) return theme.fg("dim", text);
-              this.hints.push({ row, start, end: start + visibleWidth(text), action, live });
-              const lit = this.hovered?.row === row && this.hovered.action === action;
-              return lit ? theme.fg("text", theme.bold(text)) : theme.fg("dim", text);
-            })
-            .join(theme.fg("dim", HINT_SEPARATOR));
+        const lit = (row: number, action: Action) =>
+          this.hovered?.row === row && this.hovered.action === action;
+        const region = (row: number, start: number, end: number, action: Action, live: LiveRun) => {
+          if (clickable) this.hints.push({ row, start, end, action, live });
         };
-        const verb = this.collapsed ? "expand" : "collapse";
-        const titleHints: [Action, string][] = clickable
-          ? [
-              ["toggle", `click to ${verb}`],
-              ["details", "click for details"],
-            ]
-          : [
-              ["toggle", `${TOGGLE_KEY} to ${verb}`],
-              ["details", `${DETAILS_KEY} for details`],
-            ];
-        const hintWidth = titleHints.reduce(
-          (sum, [, text], i) => sum + visibleWidth(text) + (i > 0 ? HINT_SEPARATOR.length : 0),
-          0,
-        );
-        const titled = (prefix: string, command: string, live: LiveRun) => {
-          const room = width - visibleWidth(prefix) - HINT_GAP.length - hintWidth;
-          if (room < MIN_TEXT_WIDTH) return `${prefix}${command}`;
-          const shown = truncateToWidth(command, room);
-          const column = visibleWidth(prefix) + visibleWidth(shown) + HINT_GAP.length;
-          return `${prefix}${shown}${HINT_GAP}${hintsAt(column, live, titleHints)}`;
+        const button = clickable ? DETAILS_BUTTON : `${DETAILS_BUTTON_ICON} ${DETAILS_KEY}`;
+        const buttonText = (row: number) =>
+          lit(row, "details") ? theme.fg("text", theme.bold(button)) : theme.fg("dim", button);
+
+        /**
+         * The chevron and label toggle the widget; the details button sits at the right edge, so
+         * it stays in place however long the command is.
+         */
+        const title = (chevron: string, before: string, command: string, live: LiveRun) => {
+          const row = lines.length;
+          const lead = `${chevron} ${before}`;
+          const room = width - visibleWidth(lead) - HINT_GAP.length - visibleWidth(button);
+          const withButton = room >= MIN_TEXT_WIDTH;
+          const shown = truncateToWidth(
+            theme.fg("toolTitle", theme.bold(command)),
+            withButton ? room : Math.max(1, width - visibleWidth(lead)),
+          );
+          // Hovered: the chevron brightens and the command is underlined, like a link.
+          const hovered = lit(row, "toggle");
+          const mark = hovered
+            ? theme.fg("text", theme.bold(chevron))
+            : theme.fg("accent", chevron);
+          const left = `${mark} ${before}${hovered ? theme.underline(shown) : shown}`;
+          region(row, 0, visibleWidth(left), "toggle", live);
+          if (!withButton) return left;
+          const start = width - visibleWidth(button);
+          region(row, start, width, "details", live);
+          return `${left}${" ".repeat(start - visibleWidth(left))}${buttonText(row)}`;
         };
 
         for (const { live, planned } of this.runs.values()) {
           const details = live.details();
-          const command = theme.fg("toolTitle", theme.bold(details.command));
           if (this.collapsed) {
-            const prefix = `${theme.fg("accent", "▸")} ${statusLine(details, now, theme)}  `;
-            lines.push(titled(prefix, command, live));
+            lines.push(title("▸", `${statusLine(details, now, theme)}  `, details.command, live));
             continue;
           }
-          const [status, ...body] = renderProgress(details, { expanded, now }, theme);
-          lines.push(titled(`${theme.fg("accent", "▾")} `, command, live), status);
+          const { status, rows } = renderProgress(details, { expanded, now }, theme);
+          lines.push(title("▾", "", details.command, live), status);
           if (planned === undefined) continue;
-          const rows = Math.min(
+          const budget = Math.min(
             expanded ? MAX_BODY_ROWS.expanded : MAX_BODY_ROWS.collapsed,
             planned,
           );
-          if (body.length <= rows) {
-            lines.push(...body, ...Array(rows - body.length).fill(""));
+          const body = rows.flat();
+          if (body.length <= budget) {
+            lines.push(...body, ...Array(budget - body.length).fill(""));
             continue;
           }
-          lines.push(...body.slice(0, rows - 1));
-          const more = theme.fg("dim", `  … ${body.length - rows + 1} more lines`);
-          const detailsHint: [Action, string] = clickable
-            ? ["details", "click for details"]
-            : ["details", `${DETAILS_KEY} for details`];
-          const column = visibleWidth(more) + HINT_SEPARATOR.length;
-          lines.push(
-            `${more}${theme.fg("dim", HINT_SEPARATOR)}${hintsAt(column, live, [detailsHint])}`,
-          );
+          // Keep the last line for what was left out; a row whose log is cut still counts as shown.
+          let used = 0;
+          let shown = 0;
+          while (shown < rows.length && used < budget - 1) {
+            const group = rows[shown].slice(0, budget - 1 - used);
+            lines.push(...group);
+            used += group.length;
+            shown++;
+          }
+          const row = lines.length;
+          const more = theme.fg("dim", `  … ${rows.length - shown} more  `);
+          const start = visibleWidth(more);
+          region(row, start, start + visibleWidth(button), "details", live);
+          lines.push(`${more}${buttonText(row)}`);
         }
         return lines.map((line) => truncateToWidth(line, width));
       },

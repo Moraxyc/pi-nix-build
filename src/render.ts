@@ -7,8 +7,6 @@ import { pathInStore } from "./nix/store.ts";
 import type { TreeNode } from "./tree.ts";
 
 const PROGRESS_BAR_WIDTH = 20;
-/** Rows of running builds and transfers shown while collapsed. */
-const COLLAPSED_ROWS = 8;
 /** Log lines per running build while expanded. */
 const EXPANDED_RUNNING_LOG = 5;
 /** Log lines per failed build while collapsed; expanded shows all kept lines. */
@@ -76,43 +74,60 @@ export function statusLine(details: BuildDetails, now: number, theme: Theme): st
   return `${elapsed}  ${header(details, theme)}`;
 }
 
-/** Status line, running fetches, and the dependency tree with transfers. */
+/**
+ * Status line, then row groups: running fetches, the dependency tree, and transfers. A group is
+ * one row with the log lines below it, so callers can cut between groups.
+ */
 export function renderProgress(
   details: BuildDetails,
   { expanded, now }: { expanded: boolean; now: number },
   theme: Theme,
-): string[] {
-  const lines = [statusLine(details, now, theme)];
-  for (const fetch of details.fetches) {
-    lines.push(`  ${theme.fg("accent", "⇣")} ${theme.fg("muted", fetch)}`);
-  }
-
+): { status: string; rows: string[][] } {
+  const rows: string[][] = details.fetches.map((fetch) => [
+    `  ${theme.fg("accent", "⇣")} ${theme.fg("muted", fetch)}`,
+  ]);
   const builds = new Map(details.builds.map((build) => [build.drv, build]));
   // Builds not in the tree, e.g. from results stored before the tree existed, become roots.
   const tree = details.tree ?? details.builds.map((build) => ({ drv: build.drv, children: [] }));
-  const rows: string[][] = [];
+  const waiting = (node: TreeNode) => builds.get(node.drv)?.status === "planned";
   const walk = (nodes: TreeNode[], indent: string, root: boolean) => {
     nodes.forEach((node, i) => {
       const build = builds.get(node.drv);
       if (!build) return;
+      // A run of waiting builds that each wait on a single build shares one row.
+      const chain = [node];
+      for (
+        let tail = node;
+        waiting(tail) && tail.children.length === 1 && waiting(tail.children[0]);
+      ) {
+        tail = tail.children[0];
+        chain.push(tail);
+      }
+      const tail = chain[chain.length - 1];
       const last = i === nodes.length - 1;
       const branch = root ? "" : theme.fg("borderMuted", last ? "└─ " : "├─ ");
       const below = root ? indent : indent + theme.fg("borderMuted", last ? "   " : "│  ");
-      const logIndent = `${below}${node.children.length > 0 ? theme.fg("borderMuted", "│") : " "} `;
-      rows.push([
-        `${indent}${branch}${treeRow(build, now, theme)}`,
-        ...logTail(build, expanded, theme, logIndent),
-      ]);
-      walk(node.children, below, false);
+      const logIndent = `${below}${tail.children.length > 0 ? theme.fg("borderMuted", "│") : " "} `;
+      const row =
+        chain.length > 1
+          ? waitingChainRow(
+              chain.map((link) => builds.get(link.drv)?.name ?? "?"),
+              theme,
+            )
+          : treeRow(build, now, theme);
+      rows.push([`${indent}${branch}${row}`, ...logTail(build, expanded, theme, logIndent)]);
+      walk(tail.children, below, false);
     });
   };
   walk(tree, "  ", true);
   for (const transfer of details.transfers) rows.push([`  ${transferRow(transfer, theme)}`]);
+  return { status: statusLine(details, now, theme), rows };
+}
 
-  const shown = expanded ? rows.length : Math.min(rows.length, COLLAPSED_ROWS);
-  for (const row of rows.slice(0, shown)) lines.push(...row);
-  if (shown < rows.length) lines.push(theme.fg("dim", `  … ${rows.length - shown} more`));
-  return lines;
+/** `○ a › b › c  (3 waiting)`, outermost first. */
+function waitingChainRow(names: string[], theme: Theme): string {
+  const path = names.map((name) => theme.fg("muted", name)).join(theme.fg("dim", " › "));
+  return `${theme.fg("dim", "○")} ${path}  ${theme.fg("dim", `(${names.length} waiting)`)}`;
 }
 
 export function treeRow(build: BuildView, now: number, theme: Theme): string {
