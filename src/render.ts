@@ -34,7 +34,7 @@ const TRANSFERS = {
 } as const satisfies Record<string, { icon: string; color: ThemeColor }>;
 
 /** Lines cut to the viewport instead of wrapped, so log lines stay one row each. */
-class Lines implements Component {
+export class Lines implements Component {
   private readonly lines: string[];
   constructor(lines: string[]) {
     this.lines = lines;
@@ -45,6 +45,7 @@ class Lines implements Component {
   invalidate(): void {}
 }
 
+/** Running: one status line, the full progress is in the widget. Finished: the result. */
 export function renderBuild(
   details: BuildDetails,
   options: { expanded: boolean; now: number },
@@ -52,28 +53,36 @@ export function renderBuild(
 ): Component {
   const lines =
     details.status === "running"
-      ? renderRunning(details, options, theme)
+      ? [statusLine(details, options.now, theme)]
       : renderFinished(details, options, theme);
   return new Lines(lines);
 }
 
-function renderRunning(
+/** Elapsed time with evaluation progress, or the build counts once builds are known. */
+export function statusLine(details: BuildDetails, now: number, theme: Theme): string {
+  const { counts } = details;
+  const elapsed = theme.fg("syntaxNumber", formatDuration(now - details.startedAt));
+  if (total(counts.builds) === 0 && counts.downloads.running + counts.downloads.planned === 0) {
+    const { files, current } = details.evaluation;
+    const [fetch] = details.fetches;
+    const where = fetch
+      ? `  ${theme.fg("accent", "⇣")} ${theme.fg("muted", fetch)}`
+      : current
+        ? `  ${theme.fg("dim", pathInStore(current))}`
+        : "";
+    const fileCount = `${theme.fg("syntaxNumber", String(files))} files`;
+    return `${elapsed}  ${theme.fg("accent", "evaluating")}  ${fileCount}${where}`;
+  }
+  return `${elapsed}  ${header(details, theme)}`;
+}
+
+/** Status line, running fetches, and the dependency tree with transfers. */
+export function renderProgress(
   details: BuildDetails,
   { expanded, now }: { expanded: boolean; now: number },
   theme: Theme,
 ): string[] {
-  const { counts } = details;
-  const elapsed = theme.fg("syntaxNumber", formatDuration(now - details.startedAt));
-  const lines: string[] = [];
-
-  if (total(counts.builds) === 0 && counts.downloads.running + counts.downloads.planned === 0) {
-    const { files, current } = details.evaluation;
-    const where = current ? `  ${theme.fg("dim", pathInStore(current))}` : "";
-    const fileCount = `${theme.fg("syntaxNumber", String(files))} files`;
-    lines.push(`${elapsed}  ${theme.fg("accent", "evaluating")}  ${fileCount}${where}`);
-  } else {
-    lines.push(`${elapsed}  ${header(details, theme)}`);
-  }
+  const lines = [statusLine(details, now, theme)];
   for (const fetch of details.fetches) {
     lines.push(`  ${theme.fg("accent", "⇣")} ${theme.fg("muted", fetch)}`);
   }

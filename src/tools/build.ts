@@ -11,6 +11,7 @@ import { DependencyGraph } from "../nix/graph.ts";
 import type { BuildState } from "../nix/state.ts";
 import { renderBuild } from "../render.ts";
 import { runNix } from "../runner.ts";
+import type { ProgressWidget } from "../widget.ts";
 import { buildCommand, buildParameters, displayCommand } from "./build-command.ts";
 
 /** Partial results are throttled; the renderer needs one per second for timers. */
@@ -82,7 +83,7 @@ function summarize(details: BuildDetails, plainStderr: string[]): string {
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
 }
 
-export function registerBuildTool(pi: ExtensionAPI): void {
+export function registerBuildTool(pi: ExtensionAPI, widget: ProgressWidget): void {
   pi.registerTool({
     name: "nix_build",
     label: "Nix Build",
@@ -94,7 +95,7 @@ export function registerBuildTool(pi: ExtensionAPI): void {
     ],
     parameters: buildParameters,
 
-    async execute(_toolCallId, params, signal, onUpdate, ctx) {
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
       const command = buildCommand(params);
       history ??= DurationHistory.load();
       const durations = await history;
@@ -136,6 +137,7 @@ export function registerBuildTool(pi: ExtensionAPI): void {
         lastUpdate = now;
         graph.request(run.state.builds.keys());
         const details = current("running");
+        if (ctx.hasUI) widget.update(ctx.ui, toolCallId, details);
         onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
       }, UPDATE_INTERVAL_MS);
 
@@ -159,6 +161,7 @@ export function registerBuildTool(pi: ExtensionAPI): void {
         };
       } finally {
         clearInterval(timer);
+        widget.remove(toolCallId);
       }
     },
 
