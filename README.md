@@ -2,7 +2,7 @@
 
 English | [简体中文](docs/zh/README.md)
 
-A [pi](https://github.com/earendil-works/pi) extension for Nix builds with live progress, failure diagnostics, and background job monitoring.
+A [pi](https://github.com/earendil-works/pi) extension for Nix builds and evaluation with live progress, failure diagnostics, and background job monitoring.
 
 ## Showcase
 
@@ -29,6 +29,7 @@ Surfaces failed derivations, trailing log lines, dependency blocks (`⊘`), and 
 - **Live build progress**: Displays evaluation status, dependency trees, build phases, remote builders, and estimated build times above the editor.
 - **Fullscreen detail view**: Inspects all derivations and their captured logs during or after a build.
 - **Flake and non-flake support**: Supports both `nix build` (flake installables) and `nix-build` (files, expressions, and attribute paths).
+- **Nix evaluation**: `nix_eval` returns values from `nix eval` or `nix-instantiate --eval`, as JSON by default, with Nix's error trace on failure and live progress when evaluation fetches sources or builds derivations.
 - **Failure diagnostics**: Reports failed derivations, trailing log lines, fixed-output hash mismatches, and full log paths directly to pi.
 - **Background builds and watches**: Runs long builds in the background with event notifications, and registers jobs in `/ps` when [`pi-processes`](https://github.com/aliou/pi-processes) is loaded.
 - **Command redirection**: Intercepts `nix build` and `nix-build` invocations in shell and process tools, routing them through `nix_build`.
@@ -37,7 +38,7 @@ Surfaces failed derivations, trailing log lines, dependency blocks (`⊘`), and 
 
 - [pi](https://github.com/earendil-works/pi)
 - Node.js `>= 22.19.0`
-- `nix` / `nix-build` on `PATH`
+- `nix` / `nix-build` / `nix-instantiate` on `PATH`
 
 ## Installation
 
@@ -72,12 +73,14 @@ pi install .
 
 ## Usage
 
-After installation, ask pi to run Nix builds as usual:
+After installation, ask pi to build or evaluate as usual:
 
 - _"Build the default package in this flake"_
 - _"Build `.#checks.x86_64-linux.unit` with `--keep-going`"_
 - _"Build attribute `hello` from `default.nix`"_
 - _"Run this build in the background and notify me if any derivation fails"_
+- _"Which version of `hello` does nixpkgs have?"_
+- _"List the attribute names of `.#packages.x86_64-linux`"_
 
 ### Shortcuts
 

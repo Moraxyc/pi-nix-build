@@ -28,6 +28,32 @@ Runs `nix build` or `nix-build` with live progress reporting in the UI.
 - **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt), fixed-output hash mismatches (`drv`, `specified`, `got`), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, and the full stderr log path with a `nix log <drv>` hint.
 - **Cancellation**: On `AbortSignal` or pi shutdown, sends `SIGINT` so Nix stops active builds and closes daemon connections, escalating to `SIGKILL` after 5 seconds.
 
+## `nix_eval`
+
+Evaluates a Nix value with `nix eval` or `nix-instantiate --eval` and returns it, as JSON by default.
+
+### Parameters
+
+`installable` selects flake mode (`nix eval`); `file`, `expr`, and `attrs` select non-flake mode (`nix-instantiate --eval`). One mode is required and the two cannot be combined. `file` and `expr` are mutually exclusive. `apply` and `format: "raw"` require `installable`.
+
+| Parameter     | Type                       | Description                                                                                                                 |
+| ------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `installable` | `string`                   | One flake installable, e.g. `"nixpkgs#hello.version"`. `nix eval` takes only one.                                           |
+| `file`        | `string`                   | Path to a `.nix` file. Defaults to `./default.nix` when only `attrs` is provided.                                           |
+| `expr`        | `string`                   | Nix expression passed to `nix-instantiate -E`.                                                                              |
+| `attrs`       | `string[]`                 | Attribute paths passed to `nix-instantiate -A`. Each value is printed on its own line.                                      |
+| `apply`       | `string`                   | Function applied to the value (`--apply`), e.g. `"builtins.attrNames"`.                                                     |
+| `format`      | `"json" \| "raw" \| "nix"` | `json` (default) prints JSON, with derivations as their output paths. `raw` prints a string as is. `nix` prints Nix syntax. |
+| `extraArgs`   | `string[]`                 | Extra CLI flags, e.g. `["--impure"]`.                                                                                       |
+
+### Behavior and Output
+
+- **Invocation**: Runs `nix eval <installable> [--json | --raw] [--apply <fn>]` or `nix-instantiate --eval --strict --read-write-mode [--json]`. `--strict` evaluates nested values in full; without it they print as `<CODE>` or fail to convert to JSON. `--read-write-mode` lets import from derivation (IFD) write its `.drv` files; the read-only store that `--eval` opens rejects them. Logging flags and the stderr log file are the same as for `nix_build`.
+- **Success**: Returns the value as Nix printed it. A value over 50 KB or 2000 lines is cut, and the full value is saved next to the log as `<timestamp>-<pid>.out`.
+- **Failure**: Returns the same summary as `nix_build`: Nix's error with its trace, failed IFD builds with their logs, and the full log path.
+- **Progress**: The tool row shows the number of evaluated files. The progress widget appears only once evaluation fetches a source or builds or downloads a store path.
+- **Cancellation**: Same as `nix_build`. There is no background mode; run long IFD builds with `nix_build`.
+
 ## `nix_jobs`
 
 Inspects and controls background builds.
@@ -82,3 +108,4 @@ While `nix_build` is enabled, a `tool_call` hook inspects `bash` and `process` (
 - Matches `nix build` or `nix-build` in **command position** (at the start of the command or after `;`, `&&`, `||`, `|`, `(`, `$(`, or a newline), optionally preceded by environment assignments (`FOO=bar`) or wrappers (`sudo`, `time`, `nice`, `command`, `env`).
 - Ignores occurrences inside arguments (e.g. `git commit -m "run nix build"` or `echo nix-build`).
 - Blocks matched calls and directs the model to use `nix_build` (with `background: true` when intercepted from `process start`).
+- Does not intercept `nix eval` or `nix-instantiate --eval`: their output is often piped into other commands such as `jq`.

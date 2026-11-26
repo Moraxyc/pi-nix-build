@@ -40,6 +40,9 @@
     └── tools/
         ├── build.ts           # nix_build 工具注册
         ├── build-command.ts   # 参数校验与命令构造
+        ├── eval.ts            # nix_eval 工具注册与结果输出
+        ├── eval-command.ts    # nix_eval 参数校验与命令构造
+        ├── legacy-source.ts   # nix-build 与 nix-instantiate 共用的 file、expr、attrs 参数
         └── jobs.ts            # nix_jobs 工具注册与消息渲染
 ```
 

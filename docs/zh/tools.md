@@ -28,6 +28,32 @@
 - **构建失败**：返回状态计数（已构建、已下载、失败、阻塞、未构建）、固定输出推导（fixed-output derivation）的哈希不匹配详情（`drv`、`specified`、`got`）、各失败推导的阶段、远程主机及最多最后 80 行日志（无构建日志时返回 Nix 报错文本）、求值或非推导级错误，以及完整 stderr 日志路径与 `nix log <drv>` 提示。
 - **取消与退出**：收到 `AbortSignal` 或 pi 退出时发送 `SIGINT`，通知 Nix 终止构建并关闭 daemon 连接；5 秒后仍未退出则发送 `SIGKILL`。
 
+## `nix_eval`
+
+通过 `nix eval` 或 `nix-instantiate --eval` 对 Nix 值求值并返回结果，默认输出 JSON。
+
+### 参数说明
+
+`installable` 对应 Flake 模式（`nix eval`）；`file`、`expr`、`attrs` 对应非 Flake 模式（`nix-instantiate --eval`）。必须指定其中一种模式，两种模式不可混用，`file` 与 `expr` 互斥，`apply` 与 `format: "raw"` 仅支持 `installable`。
+
+| 参数          | 类型                       | 说明                                                                                           |
+| ------------- | -------------------------- | ---------------------------------------------------------------------------------------------- |
+| `installable` | `string`                   | 单个 Flake 目标，如 `"nixpkgs#hello.version"`；`nix eval` 只接受一个。                         |
+| `file`        | `string`                   | `.nix` 文件路径；仅提供 `attrs` 时默认为 `./default.nix`。                                     |
+| `expr`        | `string`                   | 传给 `nix-instantiate -E` 的 Nix 表达式。                                                      |
+| `attrs`       | `string[]`                 | 传给 `nix-instantiate -A` 的属性路径列表；每个值单独输出一行。                                 |
+| `apply`       | `string`                   | 作用于求值结果的函数（`--apply`），如 `"builtins.attrNames"`。                                 |
+| `format`      | `"json" \| "raw" \| "nix"` | `json`（默认）输出 JSON，推导输出为其 output 路径；`raw` 原样输出字符串；`nix` 输出 Nix 语法。 |
+| `extraArgs`   | `string[]`                 | 附加的命令行参数，如 `["--impure"]`。                                                          |
+
+### 执行行为与返回值
+
+- **命令调用**：执行 `nix eval <installable> [--json | --raw] [--apply <fn>]` 或 `nix-instantiate --eval --strict --read-write-mode [--json]`。`--strict` 完整求值嵌套值，否则嵌套值显示为 `<CODE>` 或无法转为 JSON；`--read-write-mode` 允许 IFD（import from derivation）写入 `.drv` 文件，`--eval` 默认打开的只读 Store 会拒绝写入。日志参数与 stderr 日志文件与 `nix_build` 相同。
+- **求值成功**：按 Nix 的输出原样返回结果。超过 50 KB 或 2000 行时截断，完整结果保存在日志旁的 `<timestamp>-<pid>.out`。
+- **求值失败**：返回与 `nix_build` 相同的摘要：带调用栈的 Nix 报错、失败的 IFD 构建及其日志，以及完整日志路径。
+- **进度展示**：工具行显示已求值的文件数；仅当求值过程中获取源码、构建或下载 Store 路径时才显示进度组件。
+- **取消与退出**：与 `nix_build` 相同。不支持后台模式；耗时较长的 IFD 构建请改用 `nix_build`。
+
 ## `nix_jobs`
 
 查看与控制后台构建任务。
@@ -82,3 +108,4 @@
 - 仅匹配处于**命令位置**的 `nix build` 或 `nix-build`：位于命令开头，或紧随 `;`、`&&`、`||`、`|`、`(`、`$(`、换行符之后，前方允许环境变量赋值（如 `FOO=bar`）或包装命令（`sudo`、`time`、`nice`、`command`、`env`）。
 - 普通参数中的文本（如 `git commit -m "run nix build"` 或 `echo nix-build`）不受影响。
 - 命中后拦截原调用并提示改用 `nix_build`（来自 `process start` 时提示传入 `background: true`）。
+- 不拦截 `nix eval` 与 `nix-instantiate --eval`：其输出常通过管道交给 `jq` 等命令处理。

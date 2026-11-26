@@ -40,6 +40,9 @@ English | [简体中文](../zh/development.md)
     └── tools/
         ├── build.ts           # nix_build tool registration
         ├── build-command.ts   # Argument validation and command builder
+        ├── eval.ts            # nix_eval tool registration and value output
+        ├── eval-command.ts    # nix_eval argument validation and command builder
+        ├── legacy-source.ts   # file, expr and attrs shared by nix-build and nix-instantiate
         └── jobs.ts            # nix_jobs tool registration and message renderer
 ```
 

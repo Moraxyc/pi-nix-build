@@ -2,7 +2,7 @@
 
 [English](../../README.md) | 简体中文
 
-面向 [pi](https://github.com/earendil-works/pi) 的 Nix 构建扩展，提供实时进度展示、失败诊断与后台任务监控。
+面向 [pi](https://github.com/earendil-works/pi) 的 Nix 构建与求值扩展，提供实时进度展示、失败诊断与后台任务监控。
 
 ## 效果展示
 
@@ -29,6 +29,7 @@
 - **实时构建进度**：在编辑器上方展示求值进度、依赖树、构建阶段、远程构建主机及耗时预估。
 - **全屏详情视图**：在构建过程中或结束后查看所有推导（derivation）及其日志。
 - **Flake 与传统模式**：同时支持 `nix build`（Flake 目标）与 `nix-build`（文件、表达式及属性路径）。
+- **Nix 求值**：`nix_eval` 通过 `nix eval` 或 `nix-instantiate --eval` 返回求值结果（默认 JSON），失败时返回带调用栈的报错，求值过程中获取源码或构建推导时显示实时进度。
 - **失败诊断**：向 pi 返回失败推导、末尾日志、固定输出（fixed-output）哈希不匹配详情及完整日志路径。
 - **后台构建与监听**：支持后台执行长耗时构建并按事件发送通知；若已加载 [`pi-processes`](https://github.com/aliou/pi-processes)，自动接入 `/ps`。
 - **自动命令拦截**：拦截 Shell 与进程工具中的 `nix build` 和 `nix-build` 调用，转交 `nix_build` 执行。
@@ -37,7 +38,7 @@
 
 - [pi](https://github.com/earendil-works/pi)
 - Node.js `>= 22.19.0`
-- `PATH` 中可用的 `nix` / `nix-build`
+- `PATH` 中可用的 `nix` / `nix-build` / `nix-instantiate`
 
 ## 安装
 
@@ -72,12 +73,14 @@ pi install .
 
 ## 使用方式
 
-安装完成后直接向 pi 下达构建指令即可：
+安装完成后直接向 pi 下达构建或求值指令即可：
 
 - “构建当前 flake 的默认包”
 - “附加 `--keep-going` 构建 `.#checks.x86_64-linux.unit`”
 - “从 `default.nix` 构建 `hello` 属性”
 - “在后台运行此构建，若有推导失败则通知我”
+- “nixpkgs 里的 `hello` 是什么版本？”
+- “列出 `.#packages.x86_64-linux` 的属性名”
 
 ### 快捷键
 
