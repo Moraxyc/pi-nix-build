@@ -29,10 +29,11 @@
       };
 
       devShells.default = pkgs.mkShell {
-        inputsFrom = [ config.packages.default ];
-        packages = [
-          pkgs.typescript
-          pkgs.biome
+        packages = with pkgs; [
+          nodejs
+          esbuild
+          typescript
+          biome
           config.treefmt.build.wrapper
         ];
         shellHook = config.pre-commit.installationScript;

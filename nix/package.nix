@@ -1,41 +1,28 @@
 {
   lib,
-  stdenvNoCC,
-  nodejs,
+  buildNpmPackage,
+  importNpmLock,
   esbuild,
 }:
-let
-  manifest = lib.importJSON ../package.json;
-in
-stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = manifest.name;
-  inherit (manifest) version;
+buildNpmPackage (finalAttrs: {
+  pname = finalAttrs.passthru.manifest.name;
+  inherit (finalAttrs.passthru.manifest) version;
 
   src = lib.fileset.toSource {
     root = ../.;
     fileset = lib.fileset.unions [
       ../package.json
+      ../package-lock.json
       ../src
     ];
   };
 
-  nativeBuildInputs = [
-    nodejs
-    esbuild
-  ];
+  npmDeps = importNpmLock { npmRoot = finalAttrs.src; };
+  inherit (importNpmLock) npmConfigHook;
 
-  buildPhase = ''
-    runHook preBuild
-    npm run build
-    runHook postBuild
-  '';
+  nativeBuildInputs = [ esbuild ];
 
-  installPhase = ''
-    runHook preInstall
-    mkdir -p $out/lib/${finalAttrs.pname}
-    cp -r package.json dist $out/lib/${finalAttrs.pname}/
-    runHook postInstall
-  '';
+  passthru.manifest = lib.importJSON ../package.json;
 
   meta.description = "pi extension for Nix builds with live progress";
 })
