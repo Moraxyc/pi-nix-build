@@ -22,6 +22,11 @@ const MAX_BODY_ROWS = { collapsed: 10, expanded: 30 };
 const HINT_GAP = "  ";
 const DETAILS_BUTTON_ICON = "⤢";
 const DETAILS_BUTTON = `${DETAILS_BUTTON_ICON} details`;
+/** Set to 1 for the NixOS logo from Nerd Fonts; a terminal cannot tell whether its font has it. */
+const NERD_FONT_ENV = "PI_NIX_BUILD_NERD_FONT";
+const NIX_ICON = process.env[NERD_FONT_ENV] === "1" ? "\uf313" : "❄";
+/** Rule cells before the label, as in `── ❄ Nix ───`. */
+const RULE_LEAD = 2;
 
 type Action = "toggle" | "details";
 
@@ -179,7 +184,8 @@ export class ProgressWidget {
         const expanded = ui.getToolsExpanded();
         // Mouse reports reach components only in fullscreen mode.
         const clickable = this.tui?.mode === "fullscreen";
-        const lines: string[] = [];
+        // The labeled rule tells the widget apart from the editor and other widgets at a glance.
+        const lines: string[] = [headerRule(width, theme)];
         this.hints = [];
 
         const lit = (row: number, action: Action) =>
@@ -256,6 +262,13 @@ export class ProgressWidget {
       invalidate() {},
     };
   }
+}
+
+function headerRule(width: number, theme: Theme): string {
+  const label = ` ${theme.fg("accent", NIX_ICON)} ${theme.bold("Nix")} `;
+  const rest = Math.max(0, width - RULE_LEAD - visibleWidth(label));
+  const rule = (cells: number) => theme.fg("border", "─".repeat(cells));
+  return `${rule(RULE_LEAD)}${label}${rule(rest)}`;
 }
 
 /** Undefined until Nix starts a build or download; by then it has listed everything it plans. */

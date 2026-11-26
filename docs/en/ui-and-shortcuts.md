@@ -8,11 +8,12 @@ While one or more builds are running (foreground or background), `pi-nix-build` 
 
 ### Sections
 
-1. **Title row**: Displays a collapse/expand indicator (`▾` / `▸`), a single-line command summary (multi-line `-E` expressions are flattened), and a right-aligned `⤢ details` button (or `⤢ ctrl+shift+m` outside fullscreen TUI mode; omitted on narrow terminals).
-2. **Status line**:
+1. **Header rule**: One `── ❄ Nix ───` rule above all builds, so the widget is told apart from the editor and other widgets at a glance. Set `PI_NIX_BUILD_NERD_FONT=1` to show the NixOS logo from [Nerd Fonts](https://www.nerdfonts.com/) instead of `❄`; a terminal cannot report whether its font has the glyph, so this is not detected.
+2. **Title row**: Displays a collapse/expand indicator (`▾` / `▸`), a single-line command summary (multi-line `-E` expressions are flattened), and a right-aligned `⤢ details` button (or `⤢ ctrl+shift+m` outside fullscreen TUI mode; omitted on narrow terminals).
+3. **Status line**:
    - **Evaluation**: Elapsed time, `evaluating N files`, and either the active `fetchTree` operation (`⇣ ...`) or the current file path (without the `/nix/store/<hash>-.../` prefix).
    - **Build and fetch**: Elapsed time, a 20-cell progress bar (done, failed, blocked, running, planned), build count (`done/total built`), active build count (`▶ N`), binary cache downloads (`↓ done/total` and bytes), and failure count (`✗ N`).
-3. **Tree and transfer list**:
+4. **Tree and transfer list**:
    - Active `fetchTree` operations, active or failed derivations with their waiting dependents, and active transfers (`↓` download, `↑` upload, `←` copy) with byte progress and remote host.
    - Linear waiting chains collapse into one line: `○ a › b › c  (3 waiting)`.
    - Running derivations show name, stdenv phase progress (`1/9`–`9/9`, `unpackPhase` through `distPhase`), elapsed time, and remote builder host (e.g. `builder@host`). When duration history exists, elapsed time includes `/ ~<estimate>` and switches to warning color if exceeded.
