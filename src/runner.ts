@@ -125,3 +125,8 @@ export async function readBuildLog(logFile: string, drv: string): Promise<string
   }
   return lines;
 }
+
+/** Path next to a run's log file, sharing its prefix (for example `.out` or `-foo.log`). */
+export function runArtifactPath(logFile: string, suffix: string): string {
+  return `${logFile.replace(/\.log$/, "")}${suffix}`;
+}

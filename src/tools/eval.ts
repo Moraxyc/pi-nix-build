@@ -11,6 +11,7 @@ import { type BuildDetails, total } from "../details.ts";
 import { formatDuration, singleLine } from "../format.ts";
 import { ICONS } from "../icons.ts";
 import { finishedLine, Lines, renderBuild } from "../render.ts";
+import { runArtifactPath } from "../runner.ts";
 import type { ProgressWidget } from "../widget.ts";
 import { evalCommand, evalParameters } from "./eval-command.ts";
 
@@ -109,7 +110,7 @@ async function valueText({ stdout, details }: FinishedBuild): Promise<string> {
   if (value === "") return "(empty output)";
   const cut = truncateHead(value);
   if (!cut.truncated) return value;
-  const file = details.logFile.replace(/\.log$/, ".out");
+  const file = runArtifactPath(details.logFile, ".out");
   await writeFile(file, stdout);
   const shown = cut.firstLineExceedsLimit
     ? truncateLine(value.split("\n", 1)[0], ONE_LINE_PREVIEW_CHARS).text

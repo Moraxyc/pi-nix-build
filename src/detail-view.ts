@@ -15,7 +15,7 @@ import { formatPeer } from "./format.ts";
 import type { LiveRun } from "./live.ts";
 import type { Build } from "./nix/state.ts";
 import { finishedLine, statusLine, transferRow, treeRow } from "./render.ts";
-import { readBuildLog } from "./runner.ts";
+import { readBuildLog, runArtifactPath } from "./runner.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
 
 /** Narrower terminals stack the tree above the log. */
@@ -338,7 +338,7 @@ export class DetailView implements Component {
       const { logFile } = this.run.details();
       const lines = await readBuildLog(logFile, build.drv);
       if (lines.length === 0 && build.error) lines.push(...build.error.split("\n"));
-      const file = `${logFile.replace(/\.log$/, "")}-${basename(build.drv, ".drv")}.log`;
+      const file = runArtifactPath(logFile, `-${basename(build.drv, ".drv")}.log`);
       // The mode applies only when the file is created. Read-only makes an editor warn before
       // changing a copy that nothing reads back.
       await rm(file, { force: true });
