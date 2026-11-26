@@ -84,10 +84,10 @@ After installation, ask pi to build or evaluate as usual:
 
 ### Shortcuts
 
-| Shortcut       | Action                                               |
-| -------------- | ---------------------------------------------------- |
-| `Ctrl+Shift+B` | Collapse or expand the live progress widget          |
-| `Ctrl+Shift+M` | Open the fullscreen detail view for the latest build |
+| Shortcut       | Action                                                                                |
+| -------------- | ------------------------------------------------------------------------------------- |
+| `Ctrl+Shift+B` | Collapse or expand the live progress widget; with several builds, expand each in turn |
+| `Ctrl+Shift+M` | Open the fullscreen detail view for the expanded or latest build                      |
 
 ## Documentation
 

@@ -14,15 +14,15 @@ export default function (pi: ExtensionAPI) {
   registerJobsTool(pi, jobs);
   registerBashHook(pi);
   pi.registerShortcut(TOGGLE_KEY, {
-    description: "Collapse or expand Nix build progress",
+    description: "Collapse or expand Nix build progress; with several builds, expand each in turn",
     handler: () => {
-      widget.toggle();
+      widget.cycle();
     },
   });
   pi.registerShortcut(DETAILS_KEY, {
-    description: "Show the latest Nix build fullscreen",
+    description: "Show the expanded or latest Nix build fullscreen",
     handler: (ctx) => {
-      if (ctx.hasUI) widget.openLatest(ctx.ui);
+      if (ctx.hasUI) widget.openCurrent(ctx.ui);
     },
   });
   pi.on("session_shutdown", () => {

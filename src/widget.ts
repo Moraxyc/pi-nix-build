@@ -15,11 +15,8 @@ import { renderProgress, statusLine } from "./render.ts";
 const WIDGET_KEY = "pi-nix-build";
 export const TOGGLE_KEY = "ctrl+shift+b";
 export const DETAILS_KEY = "ctrl+shift+m";
-/** Below this, the details button is dropped instead of squeezing the command further. */
-const MIN_TEXT_WIDTH = 20;
-/** Upper bounds for the rows below a build's status line. */
+/** Upper bounds for the tree rows between a build's status line and its footer. */
 const MAX_BODY_ROWS = { collapsed: 10, expanded: 30 };
-const HINT_GAP = "  ";
 const DETAILS_BUTTON_ICON = "⤢";
 const DETAILS_BUTTON = `${DETAILS_BUTTON_ICON} details`;
 /** Set to 1 for the NixOS logo from Nerd Fonts; a terminal cannot tell whether its font has it. */
@@ -45,6 +42,7 @@ interface Hint {
   start: number;
   end: number;
   action: Action;
+  id: string;
   live: LiveRun;
 }
 
@@ -56,8 +54,13 @@ export class ProgressWidget {
   private readonly runs = new Map<string, Run>();
   /** The most recent build, kept after it ends so the detail view can still open it. */
   private latest: LiveRun | undefined;
-  /** One line per build instead of the tree; kept for the rest of the pi process. */
+  /** A lone build shows one line instead of the tree; kept for the rest of the pi process. */
   private collapsed = false;
+  /**
+   * With several builds, the one shown as a tree; the others show one line each. One at a time,
+   * so the widget cannot push the transcript off the screen.
+   */
+  private expanded: string | undefined;
   private ui: ExtensionUIContext | undefined;
   private tui: TUI | undefined;
   private hints: Hint[] = [];
@@ -88,6 +91,7 @@ export class ProgressWidget {
 
   remove(id: string): void {
     this.runs.delete(id);
+    if (this.expanded === id) this.expanded = undefined;
     if (this.runs.size > 0) {
       this.tui?.requestRender();
       return;
@@ -95,22 +99,46 @@ export class ProgressWidget {
     this.hide();
   }
 
-  /** Switches between one line per build and the full tree; returns whether it is now collapsed. */
-  toggle(): boolean {
-    this.collapsed = !this.collapsed;
+  /**
+   * A lone build switches between its tree and one line. Several builds take turns: none, the
+   * first, the second, and so on, back to none; without a mouse this is how each one is seen.
+   */
+  cycle(): void {
+    if (this.runs.size <= 1) {
+      this.collapsed = !this.collapsed;
+    } else {
+      const ids = [...this.runs.keys()];
+      const next = this.expanded === undefined ? 0 : ids.indexOf(this.expanded) + 1;
+      this.expanded = ids[next];
+    }
+    this.relayout();
+  }
+
+  /** A click on a title: with several builds, shows that one as a tree and folds the others. */
+  private toggleRun(id: string): void {
+    if (this.runs.size <= 1) this.collapsed = !this.collapsed;
+    else this.expanded = this.expanded === id ? undefined : id;
+    this.relayout();
+  }
+
+  private isExpanded(id: string): boolean {
+    return this.runs.size <= 1 ? !this.collapsed : this.expanded === id;
+  }
+
+  private relayout(): void {
     // Hints move with the layout; the next mouse move finds them again.
     this.hovered = undefined;
     this.tui?.requestRender();
-    return this.collapsed;
   }
 
-  /** Opens the fullscreen view of the latest build, running or not. */
-  openLatest(ui: ExtensionUIContext): void {
-    if (!this.latest) {
+  /** Opens the fullscreen view of the expanded build, or else of the latest, running or not. */
+  openCurrent(ui: ExtensionUIContext): void {
+    const live = (this.expanded && this.runs.get(this.expanded)?.live) || this.latest;
+    if (!live) {
       ui.notify("No Nix build to show yet", "info");
       return;
     }
-    this.openDetails(ui, this.latest);
+    this.openDetails(ui, live);
   }
 
   clear(): void {
@@ -164,7 +192,7 @@ export class ProgressWidget {
     if (event.button === "left" && hint) {
       // The TUI synthesizes a click only for the component that handled the press.
       if (event.type === "click") {
-        if (hint.action === "toggle") this.toggle();
+        if (hint.action === "toggle") this.toggleRun(hint.id);
         else if (this.ui) this.openDetails(this.ui, hint.live);
       }
       if (event.type === "press" || event.type === "release" || event.type === "click") {
@@ -190,25 +218,33 @@ export class ProgressWidget {
 
         const lit = (row: number, action: Action) =>
           this.hovered?.row === row && this.hovered.action === action;
-        const region = (row: number, start: number, end: number, action: Action, live: LiveRun) => {
-          if (clickable) this.hints.push({ row, start, end, action, live });
+        const region = (
+          row: number,
+          start: number,
+          end: number,
+          action: Action,
+          id: string,
+          live: LiveRun,
+        ) => {
+          if (clickable) this.hints.push({ row, start, end, action, id, live });
         };
         const button = clickable ? DETAILS_BUTTON : `${DETAILS_BUTTON_ICON} ${DETAILS_KEY}`;
         const buttonText = (row: number) =>
           lit(row, "details") ? theme.fg("text", theme.bold(button)) : theme.fg("dim", button);
 
-        /**
-         * The chevron and label toggle the widget; the details button sits at the right edge, so
-         * it stays in place however long the command is.
-         */
-        const title = (chevron: string, before: string, command: string, live: LiveRun) => {
+        /** The chevron and label expand or fold the build. */
+        const title = (
+          chevron: string,
+          before: string,
+          command: string,
+          id: string,
+          live: LiveRun,
+        ) => {
           const row = lines.length;
           const lead = `${chevron} ${before}`;
-          const room = width - visibleWidth(lead) - HINT_GAP.length - visibleWidth(button);
-          const withButton = room >= MIN_TEXT_WIDTH;
           const shown = truncateToWidth(
             theme.fg("toolTitle", theme.bold(command)),
-            withButton ? room : Math.max(1, width - visibleWidth(lead)),
+            Math.max(1, width - visibleWidth(lead)),
           );
           // Hovered: the chevron brightens and the command is underlined, like a link.
           const hovered = lit(row, "toggle");
@@ -216,45 +252,39 @@ export class ProgressWidget {
             ? theme.fg("text", theme.bold(chevron))
             : theme.fg("accent", chevron);
           const left = `${mark} ${before}${hovered ? theme.underline(shown) : shown}`;
-          region(row, 0, visibleWidth(left), "toggle", live);
-          if (!withButton) return left;
-          const start = width - visibleWidth(button);
-          region(row, start, width, "details", live);
-          return `${left}${" ".repeat(start - visibleWidth(left))}${buttonText(row)}`;
+          region(row, 0, visibleWidth(left), "toggle", id, live);
+          return left;
         };
 
-        for (const { live, planned } of this.runs.values()) {
+        for (const [id, { live, planned }] of this.runs) {
           const details = live.details();
-          if (this.collapsed) {
-            lines.push(title("▸", `${statusLine(details, now, theme)}  `, details.command, live));
+          if (!this.isExpanded(id)) {
+            const status = `${statusLine(details, now, theme)}  `;
+            lines.push(title("▸", status, details.command, id, live));
             continue;
           }
           const { status, rows } = renderProgress(details, { expanded, now }, theme);
-          lines.push(title("▾", "", details.command, live), status);
-          if (planned === undefined) continue;
-          const budget = Math.min(
-            expanded ? MAX_BODY_ROWS.expanded : MAX_BODY_ROWS.collapsed,
-            planned,
-          );
-          const body = rows.flat();
-          if (body.length <= budget) {
-            lines.push(...body, ...Array(budget - body.length).fill(""));
-            continue;
-          }
-          // Keep the last line for what was left out; a row whose log is cut still counts as shown.
+          lines.push(title("▾", "", details.command, id, live), status);
+          // Rows a build's tree may take; a row whose log is cut still counts as shown.
+          const budget =
+            planned === undefined
+              ? 0
+              : Math.min(expanded ? MAX_BODY_ROWS.expanded : MAX_BODY_ROWS.collapsed, planned);
           let used = 0;
           let shown = 0;
-          while (shown < rows.length && used < budget - 1) {
-            const group = rows[shown].slice(0, budget - 1 - used);
+          while (shown < rows.length && used < budget) {
+            const group = rows[shown].slice(0, budget - used);
             lines.push(...group);
             used += group.length;
             shown++;
           }
+          lines.push(...Array(budget - used).fill(""));
+          // The footer stays below the tree, cut or not, as the one way into the detail view.
           const row = lines.length;
-          const more = theme.fg("dim", `  … ${rows.length - shown} more  `);
-          const start = visibleWidth(more);
-          region(row, start, start + visibleWidth(button), "details", live);
-          lines.push(`${more}${buttonText(row)}`);
+          const left = shown < rows.length ? `  … ${rows.length - shown} more  ` : "  ";
+          const start = visibleWidth(left);
+          region(row, start, start + visibleWidth(button), "details", id, live);
+          lines.push(`${theme.fg("dim", left)}${buttonText(row)}`);
         }
         return lines.map((line) => truncateToWidth(line, width));
       },

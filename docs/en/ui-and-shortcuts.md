@@ -9,7 +9,7 @@ While one or more builds are running (foreground or background), `pi-nix-build` 
 ### Sections
 
 1. **Header rule**: One `── ❄ Nix ───` rule above all builds, so the widget is told apart from the editor and other widgets at a glance. Set `PI_NIX_BUILD_NERD_FONT=1` to show the NixOS logo from [Nerd Fonts](https://www.nerdfonts.com/) instead of `❄`; a terminal cannot report whether its font has the glyph, so this is not detected.
-2. **Title row**: Displays a collapse/expand indicator (`▾` / `▸`), a single-line command summary (multi-line `-E` expressions are flattened), and a right-aligned `⤢ details` button (or `⤢ ctrl+shift+m` outside fullscreen TUI mode; omitted on narrow terminals).
+2. **Title row**: Displays a collapse/expand indicator (`▾` / `▸`) and a single-line command summary (multi-line `-E` expressions are flattened). A folded build shows its status line before the command on this row.
 3. **Status line**:
    - **Evaluation**: Elapsed time, `evaluating N files`, and either the active `fetchTree` operation (`⇣ ...`) or the current file path (without the `/nix/store/<hash>-.../` prefix).
    - **Build and fetch**: Elapsed time, a 20-cell progress bar (done, failed, blocked, running, planned), build count (`done/total built`), active build count (`▶ N`), binary cache downloads (`↓ done/total` and bytes), and failure count (`✗ N`).
@@ -17,20 +17,23 @@ While one or more builds are running (foreground or background), `pi-nix-build` 
    - Active `fetchTree` operations, active or failed derivations with their waiting dependents, and active transfers (`↓` download, `↑` upload, `←` copy) with byte progress and remote host.
    - Linear waiting chains collapse into one line: `○ a › b › c  (3 waiting)`.
    - Running derivations show name, stdenv phase progress (`1/9`–`9/9`, `unpackPhase` through `distPhase`), elapsed time, and remote builder host (e.g. `builder@host`). When duration history exists, elapsed time includes `/ ~<estimate>` and switches to warning color if exceeded.
+5. **Footer**: Below the tree of an expanded build, `⤢ details` opens the detail view (`⤢ ctrl+shift+m` outside fullscreen TUI mode). When the tree is cut, the footer reads `… N more  ⤢ details`.
 
 ### Display Modes and Row Limits
 
 Two separate controls govern widget density:
 
-- **Widget collapse** (`Ctrl+Shift+B` or clicking the title row): Switches between the full progress tree and a single summary line per build.
+- **Widget collapse** (`Ctrl+Shift+B` or clicking the title row):
+  - **One build**: Expanded by default; switches between the full progress tree and one summary line.
+  - **Several builds**: All folded to one line each by default, and at most one is expanded. Clicking a title expands that build and folds the one expanded before; clicking it again folds it. `Ctrl+Shift+B` expands each build in turn, from the first to the last, then folds them all. Builds keep the order they started in.
 - **pi tool expansion mode**: Controls the maximum body rows and log preview lines when the widget is expanded. Once building or downloading starts, the widget locks its row limit to `min(limit, planned builds + planned downloads)` so the transcript above does not jump:
   - **Default (tools collapsed)**: Up to 10 rows; running derivations omit logs, failed derivations show their last 8 log lines.
   - **Tools expanded**: Up to 30 rows; running derivations show their last 5 log lines, failed derivations show up to 80 captured log lines within the remaining rows.
-  - Overflowing entries end with `… N more`.
+  - The footer row comes on top of these limits.
 
 ## Fullscreen Detail View
 
-Open the latest build—running or finished—with `Ctrl+Shift+M` or by clicking `⤢ details` in fullscreen TUI mode.
+`Ctrl+Shift+M` opens the expanded build, or the latest build—running or finished—when none is expanded. In fullscreen TUI mode, clicking `⤢ details` in a build's footer opens that build.
 
 - **Layout**: Side-by-side split at `>= 100` columns (dependency tree on the left, log pane on the right); stacked vertically on narrower terminals.
 - **Tree pane**: Lists all derivations in the build (including completed ones) and active transfers. Defaults selection to the first running derivation, then the first failed derivation, then the first entry.
@@ -40,10 +43,10 @@ Open the latest build—running or finished—with `Ctrl+Shift+M` or by clicking
 
 ### Global Shortcuts
 
-| Shortcut       | Action                                                                  |
-| -------------- | ----------------------------------------------------------------------- |
-| `Ctrl+Shift+B` | Toggle the widget between the full tree and one summary line per build. |
-| `Ctrl+Shift+M` | Open the fullscreen detail view for the latest build.                   |
+| Shortcut       | Action                                                                          |
+| -------------- | ------------------------------------------------------------------------------- |
+| `Ctrl+Shift+B` | One build: toggle its tree. Several builds: expand each in turn, then fold all. |
+| `Ctrl+Shift+M` | Open the fullscreen detail view for the expanded build, or else the latest.     |
 
 ### Detail View Keys
 
@@ -59,7 +62,7 @@ Open the latest build—running or finished—with `Ctrl+Shift+M` or by clicking
 
 pi delivers mouse events to components only in fullscreen TUI mode:
 
-- **Widget**: Left-click the command title to toggle collapse; left-click `⤢ details` to open the detail view.
+- **Widget**: Left-click the command title to expand or fold that build; left-click `⤢ details` in the footer to open the detail view.
 - **Detail view**: Left-click a derivation row to view its log; scroll the wheel over the tree pane to change selection or over the log pane to scroll logs.
 
 ## Duration History and Estimates
