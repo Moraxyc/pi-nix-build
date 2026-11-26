@@ -13,6 +13,7 @@ export class DependencyGraph {
   private readonly inputs = new Map<string, string[]>();
   private readonly requested = new Set<string>();
   private readonly queue: string[] = [];
+  private readonly idleWaiters: (() => void)[] = [];
   private reading = 0;
   private readonly onLoad: () => void;
 
@@ -28,6 +29,13 @@ export class DependencyGraph {
       this.queue.push(drv);
     }
     this.pump();
+  }
+
+  /** Requests `drvs` and resolves once every queued `.drv` read has settled. */
+  load(drvs: Iterable<string>): Promise<void> {
+    this.request(drvs);
+    if (this.reading === 0 && this.queue.length === 0) return Promise.resolve();
+    return new Promise((resolve) => this.idleWaiters.push(resolve));
   }
 
   inputsOf(drv: string): readonly string[] | undefined {
@@ -51,6 +59,9 @@ export class DependencyGraph {
           this.reading--;
           this.onLoad();
           this.pump();
+          if (this.reading === 0 && this.queue.length === 0) {
+            while (this.idleWaiters.length > 0) this.idleWaiters.shift()?.();
+          }
         });
     }
   }
