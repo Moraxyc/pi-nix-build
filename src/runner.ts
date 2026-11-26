@@ -16,6 +16,7 @@ export interface NixRun {
   state: BuildState;
   /** Every stderr line, for `nix log`-style inspection after the tool result is truncated. */
   logFile: string;
+  pid: number | undefined;
   done: Promise<NixExit>;
 }
 
@@ -32,6 +33,8 @@ export async function runNix(options: {
   args: string[];
   cwd: string;
   signal?: AbortSignal;
+  /** Own process group, so a process manager can signal Nix and everything it started. */
+  detached?: boolean;
   /** Called after each batch of applied events. */
   onChange: () => void;
 }): Promise<NixRun> {
@@ -46,6 +49,7 @@ export async function runNix(options: {
   const child = spawn(options.program, args, {
     cwd: options.cwd,
     stdio: ["ignore", "pipe", "pipe"],
+    detached: options.detached,
   });
   let cancelled = false;
   let killTimer: NodeJS.Timeout | undefined;
@@ -98,5 +102,5 @@ export async function runNix(options: {
     });
   });
 
-  return { args, state, logFile, done };
+  return { args, state, logFile, pid: child.pid, done };
 }

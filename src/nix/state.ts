@@ -123,6 +123,9 @@ export class BuildState {
   /** Running `fetchTree` activities (flake inputs, fetchGit, ...) by activity id. */
   readonly fetches = new Map<ActivityId, string>();
 
+  /** Called with every builder log line as it arrives; `Build.log` keeps only the tail. */
+  onLog: ((build: Build, line: string) => void) | undefined;
+
   private readonly activities = new Map<ActivityId, ActivityRef>();
   /** A remote build opens one activity locally and forwards another from the builder. */
   private readonly openBuildActivities = new Map<string, number>();
@@ -234,10 +237,13 @@ export class BuildState {
         return;
       }
       case ResultType.BuildLogLine:
-      case ResultType.PostBuildLogLine:
-        build.log.push(logLine(String(first)));
+      case ResultType.PostBuildLogLine: {
+        const line = logLine(String(first));
+        build.log.push(line);
         if (build.log.length > LOG_TAIL_LINES) build.log.shift();
+        this.onLog?.(build, line);
         return;
+      }
     }
   }
 

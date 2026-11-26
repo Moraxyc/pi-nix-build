@@ -1,11 +1,15 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerBashHook } from "./hooks/bash.ts";
+import { JobManager } from "./jobs/manager.ts";
 import { registerBuildTool } from "./tools/build.ts";
+import { registerJobsTool } from "./tools/jobs.ts";
 import { DETAILS_KEY, ProgressWidget, TOGGLE_KEY } from "./widget.ts";
 
 export default function (pi: ExtensionAPI) {
   const widget = new ProgressWidget();
-  registerBuildTool(pi, widget);
+  const jobs = new JobManager(pi, widget);
+  registerBuildTool(pi, widget, jobs);
+  registerJobsTool(pi, jobs);
   registerBashHook(pi);
   pi.registerShortcut(TOGGLE_KEY, {
     description: "Collapse or expand Nix build progress",
@@ -19,5 +23,8 @@ export default function (pi: ExtensionAPI) {
       if (ctx.hasUI) widget.openLatest(ctx.ui);
     },
   });
-  pi.on("session_shutdown", () => widget.clear());
+  pi.on("session_shutdown", () => {
+    jobs.stopAll();
+    widget.clear();
+  });
 }

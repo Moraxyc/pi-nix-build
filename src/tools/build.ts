@@ -1,177 +1,80 @@
-import {
-  DEFAULT_MAX_BYTES,
-  type ExtensionAPI,
-  truncateTail,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { type BuildDetails, type RunStatus, snapshot, total } from "../details.ts";
-import { formatDuration, formatPeer, singleLine } from "../format.ts";
-import { DurationHistory, type Sample } from "../history.ts";
-import type { LiveRun } from "../live.ts";
-import { DependencyGraph } from "../nix/graph.ts";
-import type { BuildState } from "../nix/state.ts";
+import { Type } from "typebox";
+import { progressText, startBuild } from "../build-run.ts";
+import type { BuildDetails } from "../details.ts";
+import { singleLine } from "../format.ts";
+import { type JobManager, watchLines } from "../jobs/manager.ts";
+import { exitNotifySchema, watchListSchema } from "../jobs/watches.ts";
 import { renderBuild } from "../render.ts";
-import { runNix } from "../runner.ts";
 import type { ProgressWidget } from "../widget.ts";
-import { buildCommand, buildParameters, displayCommand } from "./build-command.ts";
+import { buildCommand, buildParameters } from "./build-command.ts";
 
-/** Partial results are throttled; the renderer needs one per second for timers. */
-const UPDATE_INTERVAL_MS = 200;
-const TIMER_INTERVAL_MS = 1_000;
+const parameters = Type.Object({
+  ...buildParameters.properties,
+  background: Type.Optional(
+    Type.Boolean({
+      description:
+        "Return at once with a job id and keep building; you are notified when it ends and when a watch fires. Use for builds that take minutes.",
+    }),
+  ),
+  notify: Type.Optional(
+    Type.Object(
+      { ...exitNotifySchema, watches: Type.Optional(watchListSchema) },
+      { description: "background: what to be notified about." },
+    ),
+  ),
+});
 
-let history: Promise<DurationHistory> | undefined;
-
-function finishedBuilds(state: BuildState): Sample[] {
-  const samples: Sample[] = [];
-  for (const build of state.builds.values()) {
-    if (build.status !== "done" || !build.startedAt || !build.finishedAt) continue;
-    samples.push({ name: build.name, host: build.host, ms: build.finishedAt - build.startedAt });
-  }
-  return samples;
-}
-
-function progressText(details: BuildDetails): string {
-  const { builds, downloads } = details.counts;
-  const buildTotal = total(builds);
-  if (buildTotal === 0 && downloads.running === 0) {
-    return `evaluating (${details.evaluation.files} files)`;
-  }
-  return `${builds.done}/${buildTotal} built, ${builds.running} running, ${downloads.done} fetched`;
-}
-
-function summarize(details: BuildDetails, plainStderr: string[]): string {
-  const { command } = details;
-  const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
-  const { builds, downloads } = details.counts;
-  const work = `${builds.done} built, ${downloads.done} fetched`;
-  if (details.status === "succeeded") {
-    return [`${command} succeeded in ${took} (${work}). Outputs:`, ...details.outputs].join("\n");
-  }
-  if (details.status === "cancelled") {
-    return `${command} was cancelled by the user after ${took} (${work}).`;
-  }
-
-  const outcome = [work, `${builds.failed} failed`];
-  if (builds.blocked > 0) outcome.push(`${builds.blocked} blocked by failed dependencies`);
-  if (builds.planned > 0) outcome.push(`${builds.planned} not built`);
-  const lines = [`${command} failed after ${took} (${outcome.join(", ")}).`];
-  for (const mismatch of details.hashMismatches) {
-    lines.push(
-      "",
-      `Hash mismatch in fixed-output derivation ${mismatch.drv}:`,
-      `  specified: ${mismatch.specified}`,
-      `  got:       ${mismatch.got}`,
-    );
-  }
-  const mismatched = new Set(details.hashMismatches.map((m) => m.drv));
-  const failed = details.builds.filter((build) => build.status === "failed");
-  for (const build of failed) {
-    const where = [
-      build.phase && `in ${build.phase}`,
-      build.host && `on ${formatPeer(build.host)}`,
-    ];
-    lines.push("", `Failed: ${build.drv} ${where.filter(Boolean).join(" ")}`);
-    if (build.log?.length) lines.push(`Last ${build.log.length} log lines:`, ...build.log);
-    else if (build.error && !mismatched.has(build.drv)) lines.push(build.error);
-  }
-  if (failed.length === 0 && details.hashMismatches.length === 0) {
-    lines.push("", ...(details.errors.length > 0 ? details.errors : plainStderr));
-  }
-  lines.push("", `Full log: ${details.logFile}`);
-  if (failed.some((build) => (build.log?.length ?? 0) > 0)) {
-    lines.push("Per-build logs: nix log <drv>");
-  }
-  return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
-}
-
-export function registerBuildTool(pi: ExtensionAPI, widget: ProgressWidget): void {
+export function registerBuildTool(
+  pi: ExtensionAPI,
+  widget: ProgressWidget,
+  jobs: JobManager,
+): void {
   pi.registerTool({
     name: "nix_build",
     label: "Nix Build",
     description:
-      "Build with `nix build` (flake installables) or `nix-build` (file, expr, attrs) and show live progress to the user. Returns output paths on success. On failure returns the failed derivations with their last log lines, hash mismatches of fixed-output derivations, and the path of the full log.",
+      "Build with `nix build` (flake installables) or `nix-build` (file, expr, attrs) and show live progress to the user. Returns output paths on success. On failure returns the failed derivations with their last log lines, hash mismatches of fixed-output derivations, and the path of the full log. With background: true it returns a job id at once; see nix_jobs.",
     promptSnippet: "Build Nix installables with live progress; returns outputs or failure logs",
     promptGuidelines: [
-      "Use nix_build instead of running `nix build` or `nix-build` in bash: the user sees build progress and failures come back with their logs.",
+      "Use nix_build instead of running `nix build` or `nix-build` in bash or as a process: the user sees build progress and failures come back with their logs.",
+      "For nix_build runs that may take minutes, pass background: true and continue with other work. You are woken when the build ends; add notify.watches for earlier events, e.g. drv_failed with --keep-going, stalled for remote builders that may hang, or every for periodic progress. Do not poll nix_jobs status.",
     ],
-    parameters: buildParameters,
+    parameters,
 
     async execute(toolCallId, params, signal, onUpdate, ctx) {
-      const command = buildCommand(params);
-      history ??= DurationHistory.load();
-      const durations = await history;
-      const startedAt = Date.now();
-      let dirty = true;
-      const graph = new DependencyGraph(() => {
-        dirty = true;
-      });
-      const run = await runNix({
-        program: command.program,
-        args: command.args,
+      if (params.notify && !params.background) {
+        throw new Error("notify applies to background builds; pass background: true.");
+      }
+      if (params.background) {
+        const job = await jobs.start(params, params.notify ?? {}, ctx);
+        return {
+          content: [
+            {
+              type: "text",
+              text: [
+                `Started ${job.id} in the background: ${job.run.live.command}`,
+                ...watchLines(job),
+                "Keep working; you will be notified. nix_jobs can wait for, re-watch or stop it.",
+              ].join("\n"),
+            },
+          ],
+          details: undefined,
+        };
+      }
+      const run = await startBuild(params, {
         cwd: ctx.cwd,
         signal,
-        onChange: () => {
-          dirty = true;
+        onTick: (details) => {
+          if (ctx.hasUI) widget.update(ctx.ui, toolCallId, run.live);
+          onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
         },
       });
-      const current = (status: RunStatus, extra: Partial<BuildDetails> = {}) =>
-        snapshot(
-          run.state,
-          {
-            command: displayCommand(command),
-            status,
-            startedAt,
-            logFile: run.logFile,
-            ...extra,
-          },
-          {
-            inputsOf: (drv) => graph.inputsOf(drv),
-            estimate: (name, host) => durations.estimate(name, host),
-          },
-        );
-
-      let latest = current("running");
-      const live: LiveRun = {
-        command: displayCommand(command),
-        state: run.state,
-        details: () => latest,
-        inputsOf: (drv) => graph.inputsOf(drv),
-        estimate: (name, host) => durations.estimate(name, host),
-      };
-
-      let lastUpdate = 0;
-      const timer = setInterval(() => {
-        const now = Date.now();
-        if (!dirty && now - lastUpdate < TIMER_INTERVAL_MS) return;
-        dirty = false;
-        lastUpdate = now;
-        graph.request(run.state.builds.keys());
-        latest = current("running");
-        if (ctx.hasUI) widget.update(ctx.ui, toolCallId, live);
-        onUpdate?.({ content: [{ type: "text", text: progressText(latest) }], details: latest });
-      }, UPDATE_INTERVAL_MS);
-
       try {
-        const exit = await run.done;
-        // Estimates are a display aid; failing to save them must not fail the build.
-        await durations.record(finishedBuilds(run.state)).catch(() => {});
-        const status: RunStatus = exit.cancelled
-          ? "cancelled"
-          : exit.code === 0
-            ? "succeeded"
-            : "failed";
-        const details = current(status, {
-          finishedAt: Date.now(),
-          outputs: command.parseOutputs(exit.stdout),
-        });
-        latest = details;
-        return {
-          content: [{ type: "text", text: summarize(details, exit.plainStderr) }],
-          details,
-          isError: status !== "succeeded",
-        };
+        const { details, text, isError } = await run.finished;
+        return { content: [{ type: "text", text }], details, isError };
       } finally {
-        clearInterval(timer);
         widget.remove(toolCallId);
       }
     },
