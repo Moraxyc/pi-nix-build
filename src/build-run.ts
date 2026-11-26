@@ -12,7 +12,7 @@ import { formatDuration, formatPeer, singleLine } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { DependencyGraph } from "./nix/graph.ts";
-import type { BuildState } from "./nix/state.ts";
+import { type BuildState, extraErrors } from "./nix/state.ts";
 import { buildLogPath, type NixProgram, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
 import { pruneForest } from "./tree.ts";
 
@@ -222,7 +222,9 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
   const { builds, downloads } = details.counts;
   const work = `${builds.done} built, ${downloads.done} fetched`;
   if (details.status === "succeeded") {
-    return [`${command} succeeded in ${took} (${work}). Outputs:`, ...details.outputs].join("\n");
+    const summary = `${command} succeeded in ${took} (${work}).`;
+    if (details.outputs.length === 0) return summary;
+    return [`${summary} Outputs:`, ...details.outputs].join("\n");
   }
   // Counts of nothing, as after an evaluation error, would only hide the error behind zeros.
   const idle = total(builds) + total(downloads) === 0;
@@ -254,8 +256,12 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
     else if (build.error && !mismatched.has(build.drv)) lines.push(build.error);
     if (build.logFile) lines.push(`Full build log: ${build.logFile}`);
   }
-  if (failed.length === 0 && details.hashMismatches.length === 0) {
-    lines.push("", ...(details.errors.length > 0 ? details.errors : plainStderr));
+  const hasBuildFailures = failed.length > 0 || details.hashMismatches.length > 0;
+  const otherErrors = extraErrors(details.errors, hasBuildFailures);
+  if (otherErrors.length > 0) {
+    lines.push("", ...otherErrors);
+  } else if (!hasBuildFailures) {
+    lines.push("", ...plainStderr);
   }
   lines.push("", `Raw Nix log (internal-json): ${details.logFile}`);
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;

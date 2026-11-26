@@ -28,11 +28,11 @@
 
 - **实时构建进度**：在编辑器上方展示求值进度、依赖树、构建阶段、远程构建主机及耗时预估。
 - **全屏详情视图**：在构建过程中或结束后查看所有推导（derivation）及其日志。
-- **Flake 与传统模式**：同时支持 `nix build`（Flake 目标）与 `nix-build`（文件、表达式及属性路径）。
+- **Flake 与传统模式**：同时支持 `nix build`（Flake 目标）、`nix-build`（文件、表达式及属性路径）与 `nix flake check`（`nix_check`）。
 - **Nix 求值**：`nix_eval` 通过 `nix eval` 或 `nix-instantiate --eval` 返回求值结果（默认 JSON），失败时返回带调用栈的报错，求值过程中获取源码或构建推导时显示实时进度。
-- **失败诊断**：向 pi 返回失败推导、末尾日志、固定输出（fixed-output）哈希不匹配详情及完整日志路径。
-- **后台构建与监听**：支持后台执行长耗时构建并按事件发送通知；若已加载 [`pi-processes`](https://github.com/aliou/pi-processes)，自动接入 `/ps`。
-- **自动命令拦截**：拦截 Shell 与进程工具中的 `nix build` 和 `nix-build` 调用，转交 `nix_build` 执行。
+- **失败诊断**：向 pi 返回失败推导、末尾日志、固定输出（fixed-output）哈希不匹配详情、求值错误及完整日志路径。
+- **后台构建与监听**：支持后台执行长耗时构建与 Flake 检查并按事件发送通知；若已加载 [`pi-processes`](https://github.com/aliou/pi-processes)，自动接入 `/ps`。
+- **自动命令拦截**：拦截 Shell 与进程工具中的 `nix build`、`nix-build` 与 `nix flake check` 调用，转交 `nix_build` 或 `nix_check` 执行。
 
 ## 环境要求
 
@@ -77,7 +77,7 @@ pi install .
 安装完成后直接向 pi 下达构建或求值指令即可：
 
 - “构建当前 flake 的默认包”
-- “附加 `--keep-going` 构建 `.#checks.x86_64-linux.unit`”
+- “附加 `--keep-going` 运行 `nix flake check`”
 - “从 `default.nix` 构建 `hello` 属性”
 - “在后台运行此构建，若有推导失败则通知我”
 - “nixpkgs 里的 `hello` 是什么版本？”

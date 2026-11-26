@@ -69,7 +69,8 @@ export class ProgressWidget {
 
   update(ui: ExtensionUIContext, id: string, live: LiveRun): void {
     const run = this.runs.get(id) ?? { live };
-    run.planned ??= plannedOnceStarted(live.details());
+    const planned = plannedOnceStarted(live.details());
+    if (planned !== undefined) run.planned = Math.max(run.planned ?? 0, planned);
     this.runs.set(id, run);
     this.latest = live;
     if (this.ui === ui && this.tui) {

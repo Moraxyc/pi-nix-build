@@ -29,6 +29,31 @@
 - **构建失败**：返回状态计数（已构建、已下载、失败、阻塞、未构建；无任何构建或下载时省略）、固定输出推导（fixed-output derivation）的哈希不匹配详情（`drv`、`specified`、`got`）、各失败推导的阶段、远程主机及最多最后 80 行日志（无构建日志时返回 Nix 报错文本）、求值或非推导级错误、为每个输出过日志的失败推导自动落盘的纯文本日志路径（`<timestamp>-<pid>-<hash>-<name>.log`），以及原始 `@nix` `internal-json` stderr 日志路径。
 - **取消与退出**：收到 `AbortSignal` 或 pi 退出时发送 `SIGINT`，通知 Nix 终止构建并关闭 daemon 连接；5 秒后仍未退出则发送 `SIGKILL`。
 
+## `nix_check`
+
+执行 `nix flake check`，复用完整的实时进度组件、依赖树、失败诊断与后台监听能力。
+
+### 参数说明
+
+`notify` 仅在 `background: true` 时有效。
+
+| 参数         | 类型       | 说明                                                                  |
+| ------------ | ---------- | --------------------------------------------------------------------- |
+| `flake`      | `string`   | 要检查的 Flake URL，如 `"."` 或 `"github:owner/repo"`；默认为 `"."`。 |
+| `noBuild`    | `boolean`  | 传入 `--no-build`，仅校验 Flake 求值而不构建检查项。                  |
+| `allSystems` | `boolean`  | 传入 `--all-systems`，检查所有系统的 Flake 输出。                     |
+| `outLink`    | `string`   | 检查结果符号链接前缀（`--out-link <path>`）；默认不创建符号链接。     |
+| `extraArgs`  | `string[]` | 附加的命令行参数，如 `["--keep-going", "--impure", "-j", "4"]`。      |
+| `background` | `boolean`  | 为 `true` 时异步启动检查并立即返回任务 ID（如 `nix-1`）。             |
+| `notify`     | `object`   | 后台通知配置：`{ onSuccess?, onFailure?, watches? }`。                |
+
+### 执行行为与返回值
+
+- **命令调用**：执行 `nix flake check <flake> [--no-build] [--all-systems] [--out-link <path>] [extraArgs...]`，自动附加 `--log-format internal-json -v`，并将原始 stderr 写入 `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`。
+- **检查通过**：返回总耗时与构建/下载计数（若在 `extraArgs` 中传入 `--print-out-paths`，同时返回输出 Store 路径）。
+- **检查失败**：返回状态计数、固定输出哈希不匹配详情、失败推导的末尾日志及纯文本日志文件路径、所有求值错误（包含 `--keep-going` 下与构建失败并存的求值错误），以及原始 `@nix` 日志路径。
+- **取消与退出**：与 `nix_build` 相同。
+
 ## `nix_eval`
 
 通过 `nix eval` 或 `nix-instantiate --eval` 对 Nix 值求值并返回结果，默认输出 JSON。
@@ -57,7 +82,7 @@
 
 ## `nix_jobs`
 
-查看与控制后台构建任务。
+查看与控制由 `nix_build` 或 `nix_check` 启动的后台任务。
 
 ### 操作列表
 
@@ -105,9 +130,10 @@
 
 ## Bash 与进程调用拦截钩子
 
-当 `nix_build` 启用时，`tool_call` 钩子检查 `bash` 与 `process`（`action: "start"`）调用：
+`tool_call` 钩子检查 `bash` 与 `process`（`action: "start"`）调用：
 
-- 仅匹配处于**命令位置**的 `nix build` 或 `nix-build`：位于命令开头，或紧随 `;`、`&&`、`||`、`|`、`(`、`$(`、换行符之后，前方允许环境变量赋值（如 `FOO=bar`）或包装命令（`sudo`、`time`、`nice`、`command`、`env`）。
-- 普通参数中的文本（如 `git commit -m "run nix build"` 或 `echo nix-build`）不受影响。
-- 命中后拦截原调用并提示改用 `nix_build`（来自 `process start` 时提示传入 `background: true`）。
+- 当 `nix_build` 启用时，匹配处于**命令位置**的 `nix build` 或 `nix-build`：位于命令开头，或紧随 `;`、`&&`、`||`、`|`、`(`、`$(`、换行符之后，前方允许环境变量赋值（如 `FOO=bar`）或包装命令（`sudo`、`time`、`nice`、`command`、`env`）。
+- 当 `nix_check` 启用时，按相同规则匹配处于命令位置的 `nix flake check`。
+- 普通参数中的文本（如 `git commit -m "run nix flake check"` 或 `echo nix-build`）不受影响。
+- 命中后拦截原调用并提示改用 `nix_build` 或 `nix_check`（来自 `process start` 时提示传入 `background: true`）。
 - 不拦截 `nix eval` 与 `nix-instantiate --eval`：其输出常通过管道交给 `jq` 等命令处理。

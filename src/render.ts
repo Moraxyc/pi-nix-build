@@ -10,7 +10,7 @@ import {
 } from "./details.ts";
 import { formatBytes, formatDuration, formatPeer } from "./format.ts";
 import { ICONS } from "./icons.ts";
-import { STDENV_PHASES } from "./nix/state.ts";
+import { extraErrors, STDENV_PHASES } from "./nix/state.ts";
 import { pathInStore } from "./nix/store.ts";
 import { pruneForest, type TreeNode } from "./tree.ts";
 
@@ -272,9 +272,12 @@ function renderFinished(
       lines.push(...build.error.split("\n").map((line) => `    ${theme.fg("toolOutput", line)}`));
     }
   }
-  if (details.status === "failed" && details.builds.every((build) => build.status !== "failed")) {
+  if (details.status === "failed") {
     // Evaluation errors and other failures not tied to a build.
-    for (const error of details.errors) {
+    const hasBuildFailures =
+      details.hashMismatches.length > 0 ||
+      details.builds.some((build) => build.status === "failed");
+    for (const error of extraErrors(details.errors, hasBuildFailures)) {
       lines.push(...error.split("\n").map((line) => `  ${theme.fg("toolOutput", line)}`));
     }
   }

@@ -91,8 +91,8 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
     name: "nix_jobs",
     label: "Nix Jobs",
     description:
-      "Inspect and control background Nix builds started with nix_build background: true. Watches and exit notifications report events on their own; use status for an occasional look, log to read or search a derivation's clean build log by pattern or line range, and wait only when the next step needs the result.",
-    promptSnippet: "List, inspect, query logs of, wait for, re-watch or stop background Nix builds",
+      "Inspect and control background Nix runs started with nix_build or nix_check (background: true). Watches and exit notifications report events on their own; use status for an occasional look, log to read or search a derivation's clean build log by pattern or line range, and wait only when the next step needs the result.",
+    promptSnippet: "List, inspect, query logs of, wait for, re-watch or stop background Nix runs",
     parameters,
 
     async execute(_toolCallId, params, signal) {

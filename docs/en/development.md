@@ -41,10 +41,13 @@ English | [简体中文](../zh/development.md)
     │   └── store.ts           # Store-directory path and hash helpers
     └── tools/
         ├── build.ts           # nix_build tool registration
-        ├── build-command.ts   # Argument validation and command builder
+        ├── build-command.ts   # nix_build argument validation and command builder
+        ├── check.ts           # nix_check tool registration
+        ├── check-command.ts   # nix_check argument validation and command builder
         ├── eval.ts            # nix_eval tool registration and value output
         ├── eval-command.ts    # nix_eval argument validation and command builder
         ├── legacy-source.ts   # file, expr and attrs shared by nix-build and nix-instantiate
+        ├── run-tool.ts        # Shared foreground/background execution and rendering helpers
         └── jobs.ts            # nix_jobs tool registration and message renderer
 ```
 

@@ -28,11 +28,11 @@ Surfaces failed derivations, trailing log lines, dependency blocks (`⊘`), and 
 
 - **Live build progress**: Displays evaluation status, dependency trees, build phases, remote builders, and estimated build times above the editor.
 - **Fullscreen detail view**: Inspects all derivations and their captured logs during or after a build.
-- **Flake and non-flake support**: Supports both `nix build` (flake installables) and `nix-build` (files, expressions, and attribute paths).
+- **Flake and non-flake support**: Supports `nix build` (flake installables), `nix-build` (files, expressions, and attribute paths), and `nix flake check` (`nix_check`).
 - **Nix evaluation**: `nix_eval` returns values from `nix eval` or `nix-instantiate --eval`, as JSON by default, with Nix's error trace on failure and live progress when evaluation fetches sources or builds derivations.
-- **Failure diagnostics**: Reports failed derivations, trailing log lines, fixed-output hash mismatches, and full log paths directly to pi.
-- **Background builds and watches**: Runs long builds in the background with event notifications, and registers jobs in `/ps` when [`pi-processes`](https://github.com/aliou/pi-processes) is loaded.
-- **Command redirection**: Intercepts `nix build` and `nix-build` invocations in shell and process tools, routing them through `nix_build`.
+- **Failure diagnostics**: Reports failed derivations, trailing log lines, fixed-output hash mismatches, evaluation errors, and full log paths directly to pi.
+- **Background builds and watches**: Runs long builds and flake checks in the background with event notifications, and registers jobs in `/ps` when [`pi-processes`](https://github.com/aliou/pi-processes) is loaded.
+- **Command redirection**: Intercepts `nix build`, `nix-build`, and `nix flake check` invocations in shell and process tools, routing them through `nix_build` or `nix_check`.
 
 ## Requirements
 
@@ -77,7 +77,7 @@ pi install .
 After installation, ask pi to build or evaluate as usual:
 
 - _"Build the default package in this flake"_
-- _"Build `.#checks.x86_64-linux.unit` with `--keep-going`"_
+- _"Run `nix flake check` with `--keep-going`"_
 - _"Build attribute `hello` from `default.nix`"_
 - _"Run this build in the background and notify me if any derivation fails"_
 - _"Which version of `hello` does nixpkgs have?"_

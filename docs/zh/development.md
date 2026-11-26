@@ -41,10 +41,13 @@
     │   └── store.ts           # Store 路径与哈希辅助函数
     └── tools/
         ├── build.ts           # nix_build 工具注册
-        ├── build-command.ts   # 参数校验与命令构造
+        ├── build-command.ts   # nix_build 参数校验与命令构造
+        ├── check.ts           # nix_check 工具注册
+        ├── check-command.ts   # nix_check 参数校验与命令构造
         ├── eval.ts            # nix_eval 工具注册与结果输出
         ├── eval-command.ts    # nix_eval 参数校验与命令构造
         ├── legacy-source.ts   # nix-build 与 nix-instantiate 共用的 file、expr、attrs 参数
+        ├── run-tool.ts        # 前台/后台执行与渲染共享辅助逻辑
         └── jobs.ts            # nix_jobs 工具注册与消息渲染
 ```
 

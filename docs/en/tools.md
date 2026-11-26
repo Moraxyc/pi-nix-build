@@ -29,6 +29,31 @@ Runs `nix build` or `nix-build` with live progress reporting in the UI.
 - **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt; omitted when nothing was built or fetched), fixed-output hash mismatches (`drv`, `specified`, `got`), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, clean plain-text log file paths (`<timestamp>-<pid>-<hash>-<name>.log`) saved automatically for each failed derivation that emitted logs, and the raw `@nix` `internal-json` stderr log path.
 - **Cancellation**: On `AbortSignal` or pi shutdown, sends `SIGINT` so Nix stops active builds and closes daemon connections, escalating to `SIGKILL` after 5 seconds.
 
+## `nix_check`
+
+Runs `nix flake check` with live progress reporting, dependency tree, failure diagnostics, and background watch support.
+
+### Parameters
+
+`notify` requires `background: true`.
+
+| Parameter    | Type       | Description                                                                                 |
+| ------------ | ---------- | ------------------------------------------------------------------------------------------- |
+| `flake`      | `string`   | Flake URL to check, e.g. `"."` or `"github:owner/repo"`. Defaults to `"."`.                 |
+| `noBuild`    | `boolean`  | Passes `--no-build` to verify flake evaluation without building checks.                     |
+| `allSystems` | `boolean`  | Passes `--all-systems` to check outputs for all systems.                                    |
+| `outLink`    | `string`   | Prefix for check result symlinks (`--out-link <path>`). No symlinks are created by default. |
+| `extraArgs`  | `string[]` | Extra CLI flags, e.g. `["--keep-going", "--impure", "-j", "4"]`.                            |
+| `background` | `boolean`  | Starts the check asynchronously and returns a job ID immediately (e.g. `nix-1`).            |
+| `notify`     | `object`   | Background notification settings: `{ onSuccess?, onFailure?, watches? }`.                   |
+
+### Behavior and Output
+
+- **Invocation**: Runs `nix flake check <flake> [--no-build] [--all-systems] [--out-link <path>] [extraArgs...]` with `--log-format internal-json -v` and saves raw stderr to `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`.
+- **Success**: Returns elapsed time plus built and fetched counts (and output store paths if `--print-out-paths` is passed in `extraArgs`).
+- **Failure**: Returns status counts, fixed-output hash mismatches, failed derivations with trailing log lines and clean plain-text log file paths, any evaluation errors (including alongside failed checks under `--keep-going`), and the raw `@nix` log path.
+- **Cancellation**: Same as `nix_build`.
+
 ## `nix_eval`
 
 Evaluates a Nix value with `nix eval` or `nix-instantiate --eval` and returns it, as JSON by default.
@@ -57,7 +82,7 @@ Evaluates a Nix value with `nix eval` or `nix-instantiate --eval` and returns it
 
 ## `nix_jobs`
 
-Inspects and controls background builds.
+Inspects and controls background `nix_build` and `nix_check` runs.
 
 ### Actions
 
@@ -105,9 +130,10 @@ When [`pi-processes`](https://github.com/aliou/pi-processes) is loaded in the sa
 
 ## Bash and Process Hook
 
-While `nix_build` is enabled, a `tool_call` hook inspects `bash` and `process` (`action: "start"`) invocations:
+A `tool_call` hook inspects `bash` and `process` (`action: "start"`) invocations:
 
-- Matches `nix build` or `nix-build` in **command position** (at the start of the command or after `;`, `&&`, `||`, `|`, `(`, `$(`, or a newline), optionally preceded by environment assignments (`FOO=bar`) or wrappers (`sudo`, `time`, `nice`, `command`, `env`).
-- Ignores occurrences inside arguments (e.g. `git commit -m "run nix build"` or `echo nix-build`).
-- Blocks matched calls and directs the model to use `nix_build` (with `background: true` when intercepted from `process start`).
+- When `nix_build` is enabled, matches `nix build` or `nix-build` in **command position** (at the start of the command or after `;`, `&&`, `||`, `|`, `(`, `$(`, or a newline), optionally preceded by environment assignments (`FOO=bar`) or wrappers (`sudo`, `time`, `nice`, `command`, `env`).
+- When `nix_check` is enabled, matches `nix flake check` in command position under the same rules.
+- Ignores occurrences inside arguments (e.g. `git commit -m "run nix flake check"` or `echo nix-build`).
+- Blocks matched calls and directs the model to use `nix_build` or `nix_check` (with `background: true` when intercepted from `process start`).
 - Does not intercept `nix eval` or `nix-instantiate --eval`: their output is often piped into other commands such as `jq`.

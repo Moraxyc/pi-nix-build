@@ -113,7 +113,7 @@ const LISTED_PATH = new RegExp(`^\\s+(${STORE_PATH.source})$`);
 const EVALUATING_FILE = /^evaluating file '(.+)'$/;
 const FAILED_BUILD = [
   /Cannot build '([^']+\.drv)'/,
-  /build of '([^']+\.drv)'.* failed/,
+  /build of '([^']+\.drv)(?:\^[^']*)?'.* failed/,
   /builder for '([^']+\.drv)' failed/,
 ];
 /** Nix reports waits for a lock held by another process at error level; they are not errors. */
@@ -121,6 +121,18 @@ const LOCK_WAIT = /^waiting for /;
 const DEPENDENCY_FAILED = /Reason: \d+ dependenc(?:y|ies) failed/;
 const HASH_MISMATCH =
   /hash mismatch in fixed-output derivation '([^']+)':\s*specified:\s*(\S+)\s*got:\s*(\S+)/;
+const KEEP_GOING_SUMMARY = /^error:\s+some errors were encountered\b/;
+
+/** Errors not already reported under a failed derivation or hash mismatch. */
+export function extraErrors(errors: readonly string[], hasBuildFailures: boolean): string[] {
+  if (!hasBuildFailures) return [...errors];
+  return errors.filter(
+    (msg) =>
+      !KEEP_GOING_SUMMARY.test(msg) &&
+      !HASH_MISMATCH.test(msg) &&
+      !FAILED_BUILD.some((pattern) => pattern.test(msg)),
+  );
+}
 
 export class BuildState {
   readonly builds = new Map<string, Build>();
@@ -295,7 +307,6 @@ export class BuildState {
 
   private error(msg: string, now: number): void {
     if (LOCK_WAIT.test(msg)) return;
-    if (!this.errors.includes(msg)) this.errors.push(msg);
     const mismatch = HASH_MISMATCH.exec(msg);
     if (mismatch) {
       const build = this.build(mismatch[1]);
@@ -315,6 +326,7 @@ export class BuildState {
       if (build.status === "failed" && !this.hasMismatch(build)) build.error ??= msg;
       return;
     }
+    if (!this.errors.includes(msg)) this.errors.push(msg);
   }
 
   private hasMismatch(build: Build): boolean {

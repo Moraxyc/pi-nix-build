@@ -1,29 +1,18 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { progressText, startCommand } from "../build-run.ts";
-import type { BuildDetails } from "../details.ts";
-import { singleLine } from "../format.ts";
-import { type JobManager, watchLines } from "../jobs/manager.ts";
-import { exitNotifySchema, watchListSchema } from "../jobs/watches.ts";
-import { renderBuild } from "../render.ts";
+import type { JobManager } from "../jobs/manager.ts";
 import type { ProgressWidget } from "../widget.ts";
 import { buildCommand, buildParameters } from "./build-command.ts";
+import {
+  backgroundParameters,
+  executeNixCommand,
+  renderCommandCall,
+  renderCommandResult,
+} from "./run-tool.ts";
 
 const parameters = Type.Object({
   ...buildParameters.properties,
-  background: Type.Optional(
-    Type.Boolean({
-      description:
-        "Return at once with a job id and keep building; you are notified when it ends and when a watch fires. Use for builds that take minutes.",
-    }),
-  ),
-  notify: Type.Optional(
-    Type.Object(
-      { ...exitNotifySchema, watches: Type.Optional(watchListSchema) },
-      { description: "background: what to be notified about." },
-    ),
-  ),
+  ...backgroundParameters,
 });
 
 export function registerBuildTool(
@@ -44,65 +33,25 @@ export function registerBuildTool(
     ],
     parameters,
 
-    async execute(toolCallId, params, signal, onUpdate, ctx) {
-      if (params.notify && !params.background) {
-        throw new Error("notify applies to background builds; pass background: true.");
-      }
-      const command = buildCommand(params);
-      if (params.background) {
-        const job = await jobs.start(command, params.notify ?? {}, ctx);
-        return {
-          content: [
-            {
-              type: "text",
-              text: [
-                `Started ${job.id} in the background: ${job.run.live.command}`,
-                ...watchLines(job),
-                "Keep working; you will be notified. nix_jobs can wait for, re-watch or stop it.",
-              ].join("\n"),
-            },
-          ],
-          details: undefined,
-        };
-      }
-      const run = await startCommand(command, {
-        cwd: ctx.cwd,
+    execute(toolCallId, params, signal, onUpdate, ctx) {
+      return executeNixCommand(
+        buildCommand(params),
+        params,
+        toolCallId,
         signal,
-        onTick: (details) => {
-          if (ctx.hasUI) widget.update(ctx.ui, toolCallId, run.live);
-          onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
-        },
-      });
-      try {
-        const { details, text, isError } = await run.finished;
-        return { content: [{ type: "text", text }], details, isError };
-      } finally {
-        widget.remove(toolCallId);
-      }
-    },
-
-    renderCall(args, theme) {
-      let title = "nix_build";
-      let shown: string[] = [];
-      try {
-        ({ title, shownArgs: shown } = buildCommand(args));
-      } catch {
-        // Invalid argument combinations are reported by execute().
-      }
-      return new Text(
-        `${theme.fg("toolTitle", theme.bold(title))} ${singleLine(shown.join(" "))}`,
-        0,
-        0,
+        onUpdate,
+        ctx,
+        widget,
+        jobs,
       );
     },
 
-    renderResult(result, { expanded }, theme) {
-      const details = result.details as BuildDetails | undefined;
-      if (!details) {
-        const text = result.content.find((part) => part.type === "text");
-        return new Text(text?.type === "text" ? text.text : "", 0, 0);
-      }
-      return renderBuild(details, { expanded, now: Date.now() }, theme);
+    renderCall(args, theme) {
+      return renderCommandCall("nix_build", buildCommand, args, theme);
+    },
+
+    renderResult(result, options, theme) {
+      return renderCommandResult(result, options, theme);
     },
   });
 }
