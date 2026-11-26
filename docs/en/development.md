@@ -31,6 +31,7 @@ English | [简体中文](../zh/development.md)
     │   └── bash.ts            # Shell and process start interception hook
     ├── jobs/
     │   ├── manager.ts         # Background job manager and message delivery
+    │   ├── logs.ts            # Derivation resolution and plain-text log querying for nix_jobs
     │   ├── watches.ts         # Watch condition evaluation
     │   └── processes.ts       # Optional pi-processes event-bus integration
     ├── nix/

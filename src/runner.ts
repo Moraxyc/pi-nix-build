@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
 import { parseLine } from "./nix/events.ts";
 import { BuildState } from "./nix/state.ts";
@@ -109,24 +109,51 @@ export async function runNix(options: {
 }
 
 /**
- * Every builder output line of one derivation, replayed from a run's log file. `Build.log` keeps
- * only the tail; this reads the whole log on demand, also while the run is still writing it.
+ * Every builder output line of the given derivations, replayed from a run's log file in one pass.
+ * `Build.log` keeps only the tail; this reads whole logs on demand, also while the run is still
+ * writing `logFile`.
  */
-export async function readBuildLog(logFile: string, drv: string): Promise<string[]> {
+export async function readBuildLogs(
+  logFile: string,
+  drvs: Iterable<string>,
+): Promise<Map<string, string[]>> {
+  const logs = new Map<string, string[]>();
+  for (const drv of drvs) logs.set(drv, []);
+  if (logs.size === 0) return logs;
   const state = new BuildState();
-  const lines: string[] = [];
   state.onLog = (build, line) => {
-    if (build.drv === drv) lines.push(line);
+    logs.get(build.drv)?.push(line);
   };
   const input = createReadStream(logFile, { encoding: "utf8" });
   for await (const line of createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY })) {
     const event = parseLine(line);
     if (event) state.apply(event, 0);
   }
-  return lines;
+  return logs;
+}
+
+/**
+ * Every builder output line of one derivation, replayed from a run's log file. `Build.log` keeps
+ * only the tail; this reads the whole log on demand, also while the run is still writing it.
+ */
+export async function readBuildLog(logFile: string, drv: string): Promise<string[]> {
+  return (await readBuildLogs(logFile, [drv])).get(drv) ?? [];
 }
 
 /** Path next to a run's log file, sharing its prefix (for example `.out` or `-foo.log`). */
 export function runArtifactPath(logFile: string, suffix: string): string {
   return `${logFile.replace(/\.log$/, "")}${suffix}`;
+}
+
+/** Path of a derivation's extracted plain-text build log next to the run's raw `@nix` log file. */
+export function buildLogPath(logFile: string, drv: string): string {
+  return runArtifactPath(logFile, `-${basename(drv, ".drv")}.log`);
+}
+
+/** Writes a clean plain-text build log as read-only so editors warn before modifying a snapshot. */
+export async function writePlainLog(file: string, lines: readonly string[]): Promise<void> {
+  // The mode applies only when the file is created. Read-only makes an editor warn before
+  // changing a copy that nothing reads back.
+  await rm(file, { force: true });
+  await writeFile(file, lines.map((line) => `${line}\n`).join(""), { mode: 0o444 });
 }

@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { ICONS } from "../icons.ts";
+import { DEFAULT_LOG_LIMIT, jobLog, MAX_CONTEXT_LINES, MAX_LOG_LIMIT } from "../jobs/logs.ts";
 import {
   JOB_MESSAGE,
   type JobManager,
@@ -18,12 +19,50 @@ const DEFAULT_WAIT_SECONDS = 300;
 const STOP_WAIT_MS = 15_000;
 
 const parameters = Type.Object({
-  action: StringEnum(["list", "status", "wait", "update", "stop"] as const, {
+  action: StringEnum(["list", "status", "log", "wait", "update", "stop"] as const, {
     description:
-      "list: all jobs. status: progress, running builds and watches of a job. wait: block until the job ends or timeoutSeconds pass. update: change watches or exit notifications. stop: interrupt the build.",
+      "list: all jobs. status: progress, running builds and watches of a job. log: read or search a derivation's plain-text build log (while running or after it ends). wait: block until the job ends or timeoutSeconds pass. update: change watches or exit notifications. stop: interrupt the build.",
   }),
   job: Type.Optional(
     Type.String({ description: 'Job id, e.g. "nix-1". Required except for list.' }),
+  ),
+  drv: Type.Optional(
+    Type.String({
+      description:
+        "log: derivation store path, name, or unique substring. Optional when the job has only one derivation, one failed derivation, or one running derivation.",
+    }),
+  ),
+  pattern: Type.Optional(
+    Type.String({
+      description: "log: filter lines matching this text (literal substring unless regex is true).",
+    }),
+  ),
+  regex: Type.Optional(
+    Type.Boolean({ description: "log: treat pattern as a regular expression." }),
+  ),
+  ignoreCase: Type.Optional(
+    Type.Boolean({ description: "log: case-insensitive pattern matching." }),
+  ),
+  context: Type.Optional(
+    Type.Integer({
+      minimum: 0,
+      maximum: MAX_CONTEXT_LINES,
+      description: "log: lines of context before and after each pattern match (default 0).",
+    }),
+  ),
+  offset: Type.Optional(
+    Type.Integer({
+      minimum: 1,
+      description:
+        "log: 1-based start line number. Without pattern, omitting offset returns the last `limit` lines.",
+    }),
+  ),
+  limit: Type.Optional(
+    Type.Integer({
+      minimum: 1,
+      maximum: MAX_LOG_LIMIT,
+      description: `log: maximum lines (or matches when pattern is set) to return. Default ${DEFAULT_LOG_LIMIT}.`,
+    }),
   ),
   timeoutSeconds: Type.Optional(
     Type.Number({ exclusiveMinimum: 0, description: `wait: default ${DEFAULT_WAIT_SECONDS}.` }),
@@ -52,8 +91,8 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
     name: "nix_jobs",
     label: "Nix Jobs",
     description:
-      "Inspect and control background Nix builds started with nix_build background: true. Watches and exit notifications report events on their own; use status for an occasional look and wait only when the next step needs the result.",
-    promptSnippet: "List, inspect, wait for, re-watch or stop background Nix builds",
+      "Inspect and control background Nix builds started with nix_build background: true. Watches and exit notifications report events on their own; use status for an occasional look, log to read or search a derivation's clean build log by pattern or line range, and wait only when the next step needs the result.",
+    promptSnippet: "List, inspect, query logs of, wait for, re-watch or stop background Nix builds",
     parameters,
 
     async execute(_toolCallId, params, signal) {
@@ -74,6 +113,18 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
       switch (params.action) {
         case "status":
           return text(jobStatus(job, now), job.result?.isError);
+        case "log":
+          return text(
+            await jobLog(job, {
+              drv: params.drv,
+              pattern: params.pattern,
+              regex: params.regex,
+              ignoreCase: params.ignoreCase,
+              context: params.context,
+              offset: params.offset,
+              limit: params.limit,
+            }),
+          );
         case "wait": {
           const seconds = params.timeoutSeconds ?? DEFAULT_WAIT_SECONDS;
           const result = await jobs.wait(job, seconds * 1000, signal);

@@ -21,6 +21,8 @@ export interface BuildView {
   estimateMs?: number;
   error?: string;
   log?: string[];
+  /** Plain-text full build log saved to disk when this derivation failed. */
+  logFile?: string;
 }
 
 export interface TransferView {
@@ -79,9 +81,11 @@ export function snapshot(
   {
     inputsOf = () => undefined,
     estimate = () => undefined,
+    failedLogs,
   }: {
     inputsOf?: (drv: string) => readonly string[] | undefined;
     estimate?: (name: string, host: string | undefined) => number | undefined;
+    failedLogs?: ReadonlyMap<string, string>;
   } = {},
 ): BuildDetails {
   const finished = base.status !== "running";
@@ -114,6 +118,8 @@ export function snapshot(
     const tail = build.status === "failed" ? log : log.slice(-RUNNING_LOG_LINES);
     const view: BuildView = keepLog ? { ...rest, log: tail } : rest;
     if (build.status === "failed" && error) view.error = error;
+    const logFile = build.status === "failed" ? failedLogs?.get(build.drv) : undefined;
+    if (logFile) view.logFile = logFile;
     if (build.status === "running") view.estimateMs = estimate(build.name, build.host);
     builds.push(view);
   }

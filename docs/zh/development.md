@@ -31,6 +31,7 @@
     │   └── bash.ts            # Shell 与 process start 拦截钩子
     ├── jobs/
     │   ├── manager.ts         # 后台任务管理与消息投递
+    │   ├── logs.ts            # nix_jobs 推导解析与纯文本日志检索
     │   ├── watches.ts         # 监听条件判定
     │   └── processes.ts       # 可选的 pi-processes 事件总线集成
     ├── nix/

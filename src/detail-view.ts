@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { rm, writeFile } from "node:fs/promises";
-import { basename } from "node:path";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
   type Component,
@@ -15,7 +13,7 @@ import { formatPeer } from "./format.ts";
 import type { LiveRun } from "./live.ts";
 import type { Build } from "./nix/state.ts";
 import { finishedLine, statusLine, transferRow, treeRow } from "./render.ts";
-import { readBuildLog, runArtifactPath } from "./runner.ts";
+import { buildLogPath, readBuildLog, writePlainLog } from "./runner.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
 
 /** Narrower terminals stack the tree above the log. */
@@ -338,11 +336,8 @@ export class DetailView implements Component {
       const { logFile } = this.run.details();
       const lines = await readBuildLog(logFile, build.drv);
       if (lines.length === 0 && build.error) lines.push(...build.error.split("\n"));
-      const file = runArtifactPath(logFile, `-${basename(build.drv, ".drv")}.log`);
-      // The mode applies only when the file is created. Read-only makes an editor warn before
-      // changing a copy that nothing reads back.
-      await rm(file, { force: true });
-      await writeFile(file, lines.map((line) => `${line}\n`).join(""), { mode: 0o444 });
+      const file = buildLogPath(logFile, build.drv);
+      await writePlainLog(file, lines);
       this.tui.stop();
       try {
         this.notice = await runInTerminal(command, file);

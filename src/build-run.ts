@@ -5,7 +5,7 @@ import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { DependencyGraph } from "./nix/graph.ts";
 import type { BuildState } from "./nix/state.ts";
-import { type NixProgram, runNix } from "./runner.ts";
+import { buildLogPath, type NixProgram, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
 
 /** Snapshots are throttled; timers on screen need one per second. */
 const UPDATE_INTERVAL_MS = 200;
@@ -81,13 +81,18 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
       lastActivity = Date.now();
     },
   });
-  const current = (status: RunStatus, extra: Partial<BuildDetails> = {}) =>
+  const current = (
+    status: RunStatus,
+    extra: Partial<BuildDetails> = {},
+    failedLogs?: ReadonlyMap<string, string>,
+  ) =>
     snapshot(
       run.state,
       { command: displayCommand(command), status, startedAt, logFile: run.logFile, ...extra },
       {
         inputsOf: (drv) => graph.inputsOf(drv),
         estimate: (name, host) => durations.estimate(name, host),
+        failedLogs,
       },
     );
 
@@ -122,10 +127,18 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         : exit.code === 0
           ? "succeeded"
           : "failed";
-      latest = current(status, {
-        finishedAt: Date.now(),
-        outputs: command.parseOutputs(exit.stdout),
-      });
+      const failedLogs =
+        status === "failed"
+          ? await saveFailedLogs(run.state, run.logFile).catch(() => undefined)
+          : undefined;
+      latest = current(
+        status,
+        {
+          finishedAt: Date.now(),
+          outputs: command.parseOutputs(exit.stdout),
+        },
+        failedLogs,
+      );
       return {
         details: latest,
         text: summarize(latest, exit.plainStderr),
@@ -158,7 +171,28 @@ export function progressText(details: BuildDetails): string {
   return `${builds.done}/${buildTotal} built, ${builds.running} running, ${downloads.done} fetched`;
 }
 
-function summarize(details: BuildDetails, plainStderr: string[]): string {
+/**
+ * Extracts each failed derivation's full builder log from the raw `@nix` log into a clean
+ * plain-text file beside it so agents can read or grep earlier errors without parsing JSON records.
+ */
+export async function saveFailedLogs(
+  state: BuildState,
+  logFile: string,
+): Promise<Map<string, string>> {
+  const drvs = [...state.builds.values()]
+    .filter((build) => build.status === "failed")
+    .map((build) => build.drv);
+  const saved = new Map<string, string>();
+  for (const [drv, lines] of await readBuildLogs(logFile, drvs)) {
+    if (lines.length === 0) continue;
+    const file = buildLogPath(logFile, drv);
+    await writePlainLog(file, lines);
+    saved.set(drv, file);
+  }
+  return saved;
+}
+
+export function summarize(details: BuildDetails, plainStderr: string[]): string {
   const { command } = details;
   const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
   const { builds, downloads } = details.counts;
@@ -191,16 +225,14 @@ function summarize(details: BuildDetails, plainStderr: string[]): string {
       build.phase && `in ${build.phase}`,
       build.host && `on ${formatPeer(build.host)}`,
     ];
-    lines.push("", `Failed: ${build.drv} ${where.filter(Boolean).join(" ")}`);
+    lines.push("", `Failed: ${build.drv} ${where.filter(Boolean).join(" ")}`.trimEnd());
     if (build.log?.length) lines.push(`Last ${build.log.length} log lines:`, ...build.log);
     else if (build.error && !mismatched.has(build.drv)) lines.push(build.error);
+    if (build.logFile) lines.push(`Full build log: ${build.logFile}`);
   }
   if (failed.length === 0 && details.hashMismatches.length === 0) {
     lines.push("", ...(details.errors.length > 0 ? details.errors : plainStderr));
   }
-  lines.push("", `Full log: ${details.logFile}`);
-  if (failed.some((build) => (build.log?.length ?? 0) > 0)) {
-    lines.push("Per-build logs: nix log <drv>");
-  }
+  lines.push("", `Raw Nix log (internal-json): ${details.logFile}`);
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
 }

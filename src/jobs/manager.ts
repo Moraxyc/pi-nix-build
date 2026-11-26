@@ -273,7 +273,8 @@ export function jobStatus(job: Job, now: number): string {
   if (failed.length > 0)
     lines.push(`Failed so far: ${failed.map((build) => build.name).join(", ")}`);
   lines.push(...watchLines(job));
-  lines.push(`Full log: ${details.logFile}`);
+  lines.push(`Raw Nix log (internal-json): ${details.logFile}`);
+  lines.push('Use nix_jobs action: "log" to read or search derivation logs.');
   return lines.join("\n");
 }
 
