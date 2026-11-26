@@ -10,21 +10,22 @@
 
 `installables` 对应 Flake 模式（`nix build`）；`file`、`expr`、`attrs` 对应非 Flake 模式（`nix-build`）。两种模式不可混用，`file` 与 `expr` 互斥，`notify` 仅在 `background: true` 时有效。
 
-| 参数           | 类型       | 说明                                                                                   |
-| -------------- | ---------- | -------------------------------------------------------------------------------------- |
-| `installables` | `string[]` | Flake 目标列表，如 `[".#foo"]`、`["nixpkgs#hello"]`；默认为 `["."]`。                  |
-| `file`         | `string`   | `.nix` 文件路径；仅提供 `attrs` 时默认为 `./default.nix`。                             |
-| `expr`         | `string`   | 传给 `nix-build -E` 的 Nix 表达式。                                                    |
-| `attrs`        | `string[]` | 传给 `nix-build -A` 的属性路径列表。                                                   |
-| `extraArgs`    | `string[]` | 附加的命令行参数，如 `["--impure", "--keep-going", "-j", "4"]`。                       |
-| `outLink`      | `string`   | 结果符号链接路径（`--out-link <path>`）；默认不创建（`--no-link` / `--no-out-link`）。 |
-| `background`   | `boolean`  | 为 `true` 时异步启动构建并立即返回任务 ID（如 `nix-1`）。                              |
-| `notify`       | `object`   | 后台通知配置：`{ onSuccess?, onFailure?, watches? }`。                                 |
+| 参数           | 类型       | 说明                                                                                                     |
+| -------------- | ---------- | -------------------------------------------------------------------------------------------------------- |
+| `installables` | `string[]` | Flake 目标列表，如 `[".#foo"]`、`["nixpkgs#hello"]`；默认为 `["."]`。                                    |
+| `file`         | `string`   | `.nix` 文件路径；仅提供 `attrs` 时默认为 `./default.nix`。                                               |
+| `expr`         | `string`   | 传给 `nix-build -E` 的 Nix 表达式。                                                                      |
+| `attrs`        | `string[]` | 传给 `nix-build -A` 的属性路径列表。                                                                     |
+| `extraArgs`    | `string[]` | 附加的命令行参数，如 `["--impure", "--keep-going", "-j", "4"]`。                                         |
+| `outLink`      | `string`   | 结果符号链接路径（`--out-link <path>`）；默认不创建（`--no-link` / `--no-out-link`）。                   |
+| `dryRun`       | `boolean`  | 传入 `--dry-run`，不实际构建，直接返回待构建推导数、顶层依赖树、待下载路径数及基于历史中位数的预估耗时。 |
+| `background`   | `boolean`  | 为 `true` 时异步启动构建并立即返回任务 ID（如 `nix-1`）。                                                |
+| `notify`       | `object`   | 后台通知配置：`{ onSuccess?, onFailure?, watches? }`。                                                   |
 
 ### 执行行为与返回值
 
 - **命令调用**：自动附加 `--log-format internal-json -v`（`nix build` 额外附加 `--json`），并将原始 stderr 写入 `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`。
-- **构建成功**：返回总耗时、构建与下载数量以及输出 Store 路径。
+- **构建成功**：返回总耗时、构建与下载数量以及输出 Store 路径。启用 `dryRun: true` 时，返回待构建推导数量、顶层依赖树（由 `.drv` 输入推导）、待下载路径数，以及基于历史构建耗时中位数的粗略预估耗时。
 - **构建失败**：返回状态计数（已构建、已下载、失败、阻塞、未构建；无任何构建或下载时省略）、固定输出推导（fixed-output derivation）的哈希不匹配详情（`drv`、`specified`、`got`）、各失败推导的阶段、远程主机及最多最后 80 行日志（无构建日志时返回 Nix 报错文本）、求值或非推导级错误、为每个输出过日志的失败推导自动落盘的纯文本日志路径（`<timestamp>-<pid>-<hash>-<name>.log`），以及原始 `@nix` `internal-json` stderr 日志路径。
 - **取消与退出**：收到 `AbortSignal` 或 pi 退出时发送 `SIGINT`，通知 Nix 终止构建并关闭 daemon 连接；5 秒后仍未退出则发送 `SIGKILL`。
 

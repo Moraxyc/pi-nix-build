@@ -10,21 +10,22 @@ Runs `nix build` or `nix-build` with live progress reporting in the UI.
 
 `installables` selects flake mode (`nix build`); `file`, `expr`, and `attrs` select non-flake mode (`nix-build`). The two modes cannot be combined, `file` and `expr` are mutually exclusive, and `notify` requires `background: true`.
 
-| Parameter      | Type       | Description                                                                                                  |
-| -------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
-| `installables` | `string[]` | Flake installables, e.g. `[".#foo"]` or `["nixpkgs#hello"]`. Defaults to `["."]`.                            |
-| `file`         | `string`   | Path to a `.nix` file. Defaults to `./default.nix` when only `attrs` is provided.                            |
-| `expr`         | `string`   | Nix expression passed to `nix-build -E`.                                                                     |
-| `attrs`        | `string[]` | Attribute paths passed to `nix-build -A`.                                                                    |
-| `extraArgs`    | `string[]` | Extra CLI flags, e.g. `["--impure", "--keep-going", "-j", "4"]`.                                             |
-| `outLink`      | `string`   | Result symlink path (`--out-link <path>`). No symlink is created by default (`--no-link` / `--no-out-link`). |
-| `background`   | `boolean`  | Starts the build asynchronously and returns a job ID immediately (e.g. `nix-1`).                             |
-| `notify`       | `object`   | Background notification settings: `{ onSuccess?, onFailure?, watches? }`.                                    |
+| Parameter      | Type       | Description                                                                                                                                        |
+| -------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `installables` | `string[]` | Flake installables, e.g. `[".#foo"]` or `["nixpkgs#hello"]`. Defaults to `["."]`.                                                                  |
+| `file`         | `string`   | Path to a `.nix` file. Defaults to `./default.nix` when only `attrs` is provided.                                                                  |
+| `expr`         | `string`   | Nix expression passed to `nix-build -E`.                                                                                                           |
+| `attrs`        | `string[]` | Attribute paths passed to `nix-build -A`.                                                                                                          |
+| `extraArgs`    | `string[]` | Extra CLI flags, e.g. `["--impure", "--keep-going", "-j", "4"]`.                                                                                   |
+| `outLink`      | `string`   | Result symlink path (`--out-link <path>`). No symlink is created by default (`--no-link` / `--no-out-link`).                                       |
+| `dryRun`       | `boolean`  | Passes `--dry-run` and previews planned derivations, top-level dependencies, fetch count, and rough historical duration estimate without building. |
+| `background`   | `boolean`  | Starts the build asynchronously and returns a job ID immediately (e.g. `nix-1`).                                                                   |
+| `notify`       | `object`   | Background notification settings: `{ onSuccess?, onFailure?, watches? }`.                                                                          |
 
 ### Behavior and Output
 
 - **Invocation**: Appends `--log-format internal-json -v` (plus `--json` for `nix build`) and saves raw stderr to `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`.
-- **Success**: Returns elapsed time, built and fetched counts, and output store paths.
+- **Success**: Returns elapsed time, built and fetched counts, and output store paths. With `dryRun: true`, returns the planned derivation count, top-level dependency tree (from `.drv` inputs), planned fetch count, and a rough duration estimate from median historical build times.
 - **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt; omitted when nothing was built or fetched), fixed-output hash mismatches (`drv`, `specified`, `got`), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, clean plain-text log file paths (`<timestamp>-<pid>-<hash>-<name>.log`) saved automatically for each failed derivation that emitted logs, and the raw `@nix` `internal-json` stderr log path.
 - **Cancellation**: On `AbortSignal` or pi shutdown, sends `SIGINT` so Nix stops active builds and closes daemon connections, escalating to `SIGKILL` after 5 seconds.
 
