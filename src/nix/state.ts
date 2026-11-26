@@ -99,6 +99,8 @@ export const UPSTREAM_MESSAGES = [
   "builder for '",
   "hash mismatch in fixed-output derivation '",
   "%d %s failed",
+  "waiting for another Nix process to finish fetching input",
+  "waiting for lock on ",
 ];
 
 const PLANNED_BUILDS = /^(?:these \d+ derivations|this derivation) will be built:$/;
@@ -110,6 +112,8 @@ const FAILED_BUILD = [
   /build of '([^']+\.drv)'.* failed/,
   /builder for '([^']+\.drv)' failed/,
 ];
+/** Nix reports waits for a lock held by another process at error level; they are not errors. */
+const LOCK_WAIT = /^waiting for /;
 const DEPENDENCY_FAILED = /Reason: \d+ dependenc(?:y|ies) failed/;
 const HASH_MISMATCH =
   /hash mismatch in fixed-output derivation '([^']+)':\s*specified:\s*(\S+)\s*got:\s*(\S+)/;
@@ -276,6 +280,7 @@ export class BuildState {
   }
 
   private error(msg: string, now: number): void {
+    if (LOCK_WAIT.test(msg)) return;
     if (!this.errors.includes(msg)) this.errors.push(msg);
     const mismatch = HASH_MISMATCH.exec(msg);
     if (mismatch) {
