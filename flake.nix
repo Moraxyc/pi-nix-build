@@ -1,61 +1,35 @@
 {
   description = "pi extension for Nix builds with live progress";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    flake-parts = {
+      url = "github:hercules-ci/flake-parts";
+      inputs.nixpkgs-lib.follows = "nixpkgs";
+    };
+    systems.url = "github:nix-systems/default";
+  };
 
   outputs =
-    { nixpkgs, ... }:
-    let
-      forAllSystems = nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed;
-    in
-    {
-      devShells = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
-        {
-          default = pkgs.mkShell {
-            packages = with pkgs; [
-              nodejs
-              typescript
-              biome
-              nixfmt
-            ];
-          };
-        }
-      );
+    inputs:
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } {
+      systems = import inputs.systems;
+      imports = [ inputs.flake-parts.flakeModules.partitions ];
 
-      formatter = forAllSystems (
-        system:
-        let
-          pkgs = nixpkgs.legacyPackages.${system};
-        in
-        pkgs.treefmt.withConfig {
-          runtimeInputs = with pkgs; [
-            biome
-            nixfmt
-          ];
-          settings = {
-            on-unmatched = "info";
-            tree-root-file = "flake.nix";
-            formatter.biome = {
-              command = "biome";
-              options = [
-                "format"
-                "--write"
-              ];
-              includes = [
-                "*.ts"
-                "*.json"
-              ];
-            };
-            formatter.nixfmt = {
-              command = "nixfmt";
-              includes = [ "*.nix" ];
-            };
-          };
-        }
-      );
+      partitionedAttrs = {
+        checks = "dev";
+        devShells = "dev";
+        formatter = "dev";
+      };
+      partitions.dev = {
+        extraInputsFlake = ./dev;
+        module = ./dev/flake-module.nix;
+      };
+
+      perSystem =
+        { pkgs, ... }:
+        {
+          packages.default = pkgs.callPackage ./nix/package.nix { };
+        };
     };
 }
