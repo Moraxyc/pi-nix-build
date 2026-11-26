@@ -10,16 +10,16 @@ Runs `nix build` or `nix-build` with live progress reporting in the UI.
 
 `installables` selects flake mode (`nix build`); `file`, `expr`, and `attrs` select non-flake mode (`nix-build`). The two modes cannot be combined, `file` and `expr` are mutually exclusive, and `notify` requires `background: true`.
 
-| Parameter | Type | Description |
-|---|---|---|
-| `installables` | `string[]` | Flake installables, e.g. `[".#foo"]` or `["nixpkgs#hello"]`. Defaults to `["."]`. |
-| `file` | `string` | Path to a `.nix` file. Defaults to `./default.nix` when only `attrs` is provided. |
-| `expr` | `string` | Nix expression passed to `nix-build -E`. |
-| `attrs` | `string[]` | Attribute paths passed to `nix-build -A`. |
-| `extraArgs` | `string[]` | Extra CLI flags, e.g. `["--impure", "--keep-going", "-j", "4"]`. |
-| `outLink` | `string` | Result symlink path (`--out-link <path>`). No symlink is created by default (`--no-link` / `--no-out-link`). |
-| `background` | `boolean` | Starts the build asynchronously and returns a job ID immediately (e.g. `nix-1`). |
-| `notify` | `object` | Background notification settings: `{ onSuccess?, onFailure?, watches? }`. |
+| Parameter      | Type       | Description                                                                                                  |
+| -------------- | ---------- | ------------------------------------------------------------------------------------------------------------ |
+| `installables` | `string[]` | Flake installables, e.g. `[".#foo"]` or `["nixpkgs#hello"]`. Defaults to `["."]`.                            |
+| `file`         | `string`   | Path to a `.nix` file. Defaults to `./default.nix` when only `attrs` is provided.                            |
+| `expr`         | `string`   | Nix expression passed to `nix-build -E`.                                                                     |
+| `attrs`        | `string[]` | Attribute paths passed to `nix-build -A`.                                                                    |
+| `extraArgs`    | `string[]` | Extra CLI flags, e.g. `["--impure", "--keep-going", "-j", "4"]`.                                             |
+| `outLink`      | `string`   | Result symlink path (`--out-link <path>`). No symlink is created by default (`--no-link` / `--no-out-link`). |
+| `background`   | `boolean`  | Starts the build asynchronously and returns a job ID immediately (e.g. `nix-1`).                             |
+| `notify`       | `object`   | Background notification settings: `{ onSuccess?, onFailure?, watches? }`.                                    |
 
 ### Behavior and Output
 
@@ -34,27 +34,27 @@ Inspects and controls background builds.
 
 ### Actions
 
-| Action | Parameters | Behavior |
-|---|---|---|
-| `list` | — | Lists all session jobs with ID, state, elapsed time, command, and progress summary. |
-| `status` | `job` | Returns elapsed time, progress summary, active derivations (elapsed time, phase, host), failed derivations, active watches, exit notification levels, and full log path. |
-| `wait` | `job`, optional `timeoutSeconds` (default `300`) | Blocks until the job completes or times out. When a job ends during `wait`, the result returns directly to the caller without starting a separate turn. |
-| `update` | `job`, optional `watches`, optional `notify` | Modifies watches (`mode`: `"append" \| "replace" \| "remove" \| "clear"`, `items`, `indexes`) or exit notification levels (`onSuccess`, `onFailure`) on a running job. |
-| `stop` | `job` | Interrupts the build and waits up to 15 seconds for termination. |
+| Action   | Parameters                                       | Behavior                                                                                                                                                                 |
+| -------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list`   | —                                                | Lists all session jobs with ID, state, elapsed time, command, and progress summary.                                                                                      |
+| `status` | `job`                                            | Returns elapsed time, progress summary, active derivations (elapsed time, phase, host), failed derivations, active watches, exit notification levels, and full log path. |
+| `wait`   | `job`, optional `timeoutSeconds` (default `300`) | Blocks until the job completes or times out. When a job ends during `wait`, the result returns directly to the caller without starting a separate turn.                  |
+| `update` | `job`, optional `watches`, optional `notify`     | Modifies watches (`mode`: `"append" \| "replace" \| "remove" \| "clear"`, `items`, `indexes`) or exit notification levels (`onSuccess`, `onFailure`) on a running job.   |
+| `stop`   | `job`                                            | Interrupts the build and waits up to 15 seconds for termination.                                                                                                         |
 
 ### Watches
 
 Each job accepts up to **20** watches via `notify.watches` or `nix_jobs` `update`. Every watch supports an optional `on` attention level. Where `match` is accepted, it performs a literal substring match by default and supports `regex: true`.
 
-| Event | Fields | Trigger |
-|---|---|---|
-| `drv_failed` | `match?`, `regex?` | Once per failed derivation (useful with `--keep-going`), including the last 20 log lines. `match` filters by derivation name. |
-| `drv_built` | `match?`, `regex?` | Once per completed derivation. `match` filters by derivation name. |
-| `stalled` | `minutes` | No Nix output or progress for `minutes`; resets automatically once activity resumes. |
-| `every` | `minutes` | Periodic progress report every `minutes`. |
-| `after` | `minutes` | Once, `minutes` after the watch is added. |
-| `progress` | `percent` (`1`–`100`) | Once when completed derivations reach `percent`% of planned builds. |
-| `log_match` | `match`, `regex?`, `repeat?` | Builder log line matches `match`. Fires on the first match by default; with `repeat: true`, batches up to 10 lines at most once every 10 seconds. |
+| Event        | Fields                       | Trigger                                                                                                                                           |
+| ------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `drv_failed` | `match?`, `regex?`           | Once per failed derivation (useful with `--keep-going`), including the last 20 log lines. `match` filters by derivation name.                     |
+| `drv_built`  | `match?`, `regex?`           | Once per completed derivation. `match` filters by derivation name.                                                                                |
+| `stalled`    | `minutes`                    | No Nix output or progress for `minutes`; resets automatically once activity resumes.                                                              |
+| `every`      | `minutes`                    | Periodic progress report every `minutes`.                                                                                                         |
+| `after`      | `minutes`                    | Once, `minutes` after the watch is added.                                                                                                         |
+| `progress`   | `percent` (`1`–`100`)        | Once when completed derivations reach `percent`% of planned builds.                                                                               |
+| `log_match`  | `match`, `regex?`, `repeat?` | Builder log line matches `match`. Fires on the first match by default; with `repeat: true`, batches up to 10 lines at most once every 10 seconds. |
 
 ### Attention Levels
 

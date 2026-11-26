@@ -39,20 +39,20 @@ Open the latest build—running or finished—with `Ctrl+Shift+M` or by clicking
 
 ### Global Shortcuts
 
-| Shortcut | Action |
-|---|---|
+| Shortcut       | Action                                                                  |
+| -------------- | ----------------------------------------------------------------------- |
 | `Ctrl+Shift+B` | Toggle the widget between the full tree and one summary line per build. |
-| `Ctrl+Shift+M` | Open the fullscreen detail view for the latest build. |
+| `Ctrl+Shift+M` | Open the fullscreen detail view for the latest build.                   |
 
 ### Detail View Keys
 
-| Key | Action |
-|---|---|
-| `↑` / `↓` or `k` / `j` | Move selection in the dependency tree. |
-| `PgUp` / `PgDn` | Scroll the log pane by one page. |
-| `g` / `Home` | Jump to the top of the log. |
-| `G` / `End` | Jump to the bottom of the log and resume auto-follow. |
-| `Esc` / `q` | Close the detail view. |
+| Key                    | Action                                                |
+| ---------------------- | ----------------------------------------------------- |
+| `↑` / `↓` or `k` / `j` | Move selection in the dependency tree.                |
+| `PgUp` / `PgDn`        | Scroll the log pane by one page.                      |
+| `g` / `Home`           | Jump to the top of the log.                           |
+| `G` / `End`            | Jump to the bottom of the log and resume auto-follow. |
+| `Esc` / `q`            | Close the detail view.                                |
 
 ### Mouse Controls (Fullscreen TUI Mode Only)
 

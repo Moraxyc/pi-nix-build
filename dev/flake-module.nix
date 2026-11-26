@@ -18,6 +18,13 @@
           # vcs is dropped: its root would resolve to the generated config in the store.
           settings = removeAttrs (lib.importJSON ../biome.json) [ "vcs" ];
         };
+        # treefmt-nix limits biome to JS, JSON and CSS; `biome check` also formats these.
+        settings.formatter.biome.includes = [
+          "*.md"
+          "*.yml"
+          "*.yaml"
+        ];
+        settings.excludes = [ "*.webp" ];
       };
 
       pre-commit = {

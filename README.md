@@ -74,25 +74,25 @@ pi install .
 
 After installation, ask pi to run Nix builds as usual:
 
-- *"Build the default package in this flake"*
-- *"Build `.#checks.x86_64-linux.unit` with `--keep-going`"*
-- *"Build attribute `hello` from `default.nix`"*
-- *"Run this build in the background and notify me if any derivation fails"*
+- _"Build the default package in this flake"_
+- _"Build `.#checks.x86_64-linux.unit` with `--keep-going`"_
+- _"Build attribute `hello` from `default.nix`"_
+- _"Run this build in the background and notify me if any derivation fails"_
 
 ### Shortcuts
 
-| Shortcut | Action |
-|---|---|
-| `Ctrl+Shift+B` | Collapse or expand the live progress widget |
+| Shortcut       | Action                                               |
+| -------------- | ---------------------------------------------------- |
+| `Ctrl+Shift+B` | Collapse or expand the live progress widget          |
 | `Ctrl+Shift+M` | Open the fullscreen detail view for the latest build |
 
 ## Documentation
 
-| Topic | English | 简体中文 |
-|---|---|---|
-| Tools, Watches & Hooks | [docs/en/tools.md](docs/en/tools.md) | [docs/zh/tools.md](docs/zh/tools.md) |
+| Topic                        | English                                                    | 简体中文                                                   |
+| ---------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
+| Tools, Watches & Hooks       | [docs/en/tools.md](docs/en/tools.md)                       | [docs/zh/tools.md](docs/zh/tools.md)                       |
 | Live UI, Shortcuts & History | [docs/en/ui-and-shortcuts.md](docs/en/ui-and-shortcuts.md) | [docs/zh/ui-and-shortcuts.md](docs/zh/ui-and-shortcuts.md) |
-| Development & Architecture | [docs/en/development.md](docs/en/development.md) | [docs/zh/development.md](docs/zh/development.md) |
+| Development & Architecture   | [docs/en/development.md](docs/en/development.md)           | [docs/zh/development.md](docs/zh/development.md)           |
 
 ## License
 
