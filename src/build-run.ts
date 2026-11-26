@@ -155,14 +155,16 @@ function summarize(details: BuildDetails, plainStderr: string[]): string {
   if (details.status === "succeeded") {
     return [`${command} succeeded in ${took} (${work}). Outputs:`, ...details.outputs].join("\n");
   }
+  // Counts of nothing, as after an evaluation error, would only hide the error behind zeros.
+  const idle = total(builds) + total(downloads) === 0;
   if (details.status === "cancelled") {
-    return `${command} was cancelled after ${took} (${work}).`;
+    return `${command} was cancelled after ${took}${idle ? "" : ` (${work})`}.`;
   }
 
   const outcome = [work, `${builds.failed} failed`];
   if (builds.blocked > 0) outcome.push(`${builds.blocked} blocked by failed dependencies`);
   if (builds.planned > 0) outcome.push(`${builds.planned} not built`);
-  const lines = [`${command} failed after ${took} (${outcome.join(", ")}).`];
+  const lines = [`${command} failed after ${took}${idle ? "" : ` (${outcome.join(", ")})`}.`];
   for (const mismatch of details.hashMismatches) {
     lines.push(
       "",

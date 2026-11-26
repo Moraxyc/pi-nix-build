@@ -25,7 +25,7 @@
 
 - **命令调用**：自动附加 `--log-format internal-json -v`（`nix build` 额外附加 `--json`），并将原始 stderr 写入 `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`。
 - **构建成功**：返回总耗时、构建与下载数量以及输出 Store 路径。
-- **构建失败**：返回状态计数（已构建、已下载、失败、阻塞、未构建）、固定输出推导（fixed-output derivation）的哈希不匹配详情（`drv`、`specified`、`got`）、各失败推导的阶段、远程主机及最多最后 80 行日志（无构建日志时返回 Nix 报错文本）、求值或非推导级错误，以及完整 stderr 日志路径与 `nix log <drv>` 提示。
+- **构建失败**：返回状态计数（已构建、已下载、失败、阻塞、未构建；无任何构建或下载时省略）、固定输出推导（fixed-output derivation）的哈希不匹配详情（`drv`、`specified`、`got`）、各失败推导的阶段、远程主机及最多最后 80 行日志（无构建日志时返回 Nix 报错文本）、求值或非推导级错误，以及完整 stderr 日志路径与 `nix log <drv>` 提示。
 - **取消与退出**：收到 `AbortSignal` 或 pi 退出时发送 `SIGINT`，通知 Nix 终止构建并关闭 daemon 连接；5 秒后仍未退出则发送 `SIGKILL`。
 
 ## `nix_eval`

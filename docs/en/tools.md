@@ -25,7 +25,7 @@ Runs `nix build` or `nix-build` with live progress reporting in the UI.
 
 - **Invocation**: Appends `--log-format internal-json -v` (plus `--json` for `nix build`) and saves raw stderr to `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`.
 - **Success**: Returns elapsed time, built and fetched counts, and output store paths.
-- **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt), fixed-output hash mismatches (`drv`, `specified`, `got`), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, and the full stderr log path with a `nix log <drv>` hint.
+- **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt; omitted when nothing was built or fetched), fixed-output hash mismatches (`drv`, `specified`, `got`), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, and the full stderr log path with a `nix log <drv>` hint.
 - **Cancellation**: On `AbortSignal` or pi shutdown, sends `SIGINT` so Nix stops active builds and closes daemon connections, escalating to `SIGKILL` after 5 seconds.
 
 ## `nix_eval`
