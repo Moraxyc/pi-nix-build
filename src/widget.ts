@@ -1,6 +1,13 @@
 import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, type TUI, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import {
+  type Component,
+  type TUI,
+  type TuiMouseEvent,
+  truncateToWidth,
+  visibleWidth,
+} from "@earendil-works/pi-tui";
 import { type BuildDetails, total } from "./details.ts";
+import { aroundPointerMoves } from "./pointer.ts";
 import { renderProgress, statusLine } from "./render.ts";
 
 const WIDGET_KEY = "pi-nix-build";
@@ -19,6 +26,13 @@ interface Run {
   planned?: number;
 }
 
+/** Where the toggle hint was drawn in the last frame, in widget-local cells. */
+interface HintRegion {
+  row: number;
+  start: number;
+  end: number;
+}
+
 /**
  * Live progress of every running build, above the editor. Tool rows only show a status line, so
  * the progress stays visible when another extension replaces tool rendering.
@@ -29,6 +43,12 @@ export class ProgressWidget {
   private collapsed = false;
   private ui: ExtensionUIContext | undefined;
   private tui: TUI | undefined;
+  private hints: HintRegion[] = [];
+  /** Row of the hint under the pointer. */
+  private hovered: number | undefined;
+  /** Set when a pointer move reaches the widget during one TUI dispatch. */
+  private pointerOnWidget = false;
+  private stopWatching: (() => void) | undefined;
 
   update(ui: ExtensionUIContext, id: string, details: BuildDetails): void {
     const run = this.runs.get(id) ?? { details };
@@ -39,9 +59,12 @@ export class ProgressWidget {
       this.tui.requestRender();
       return;
     }
+    this.stopWatching?.();
     this.ui = ui;
     ui.setWidget(WIDGET_KEY, (tui, theme) => {
       this.tui = tui;
+      this.stopWatching?.();
+      this.stopWatching = aroundPointerMoves(tui, (dispatch) => this.trackLeave(dispatch));
       return this.component(ui, theme);
     });
   }
@@ -58,15 +81,49 @@ export class ProgressWidget {
   /** Switches between one line per build and the full tree; returns whether it is now collapsed. */
   toggle(): boolean {
     this.collapsed = !this.collapsed;
+    // The hint moves with the layout; the next mouse move finds it again.
+    this.hovered = undefined;
     this.tui?.requestRender();
     return this.collapsed;
   }
 
   clear(): void {
     this.runs.clear();
+    this.stopWatching?.();
+    this.stopWatching = undefined;
     this.ui?.setWidget(WIDGET_KEY, undefined);
     this.ui = undefined;
     this.tui = undefined;
+    this.hovered = undefined;
+  }
+
+  /** A move the TUI dispatched elsewhere means the pointer left the hint. */
+  private trackLeave(dispatch: () => unknown): unknown {
+    this.pointerOnWidget = false;
+    const result = dispatch();
+    if (!this.pointerOnWidget && this.hovered !== undefined) {
+      this.hovered = undefined;
+      this.tui?.requestRender();
+    }
+    return result;
+  }
+
+  private handleMouse(event: TuiMouseEvent) {
+    this.pointerOnWidget = true;
+    const row = this.hints.find(
+      (hint) => event.y === hint.row && event.x >= hint.start && event.x < hint.end,
+    )?.row;
+    if (event.button === "left" && row !== undefined) {
+      // The TUI synthesizes a click only for the component that handled the press.
+      if (event.type === "click") this.toggle();
+      if (event.type === "press" || event.type === "release" || event.type === "click") {
+        return { handled: true };
+      }
+    }
+    if (row === this.hovered)
+      return row !== undefined ? { handled: true, render: false } : undefined;
+    this.hovered = row;
+    return { handled: row !== undefined, render: true };
   }
 
   private component(ui: ExtensionUIContext, theme: Theme): Component {
@@ -74,20 +131,32 @@ export class ProgressWidget {
       render: (width) => {
         const now = Date.now();
         const expanded = ui.getToolsExpanded();
+        // Mouse reports reach components only in fullscreen mode.
+        const clickable = this.tui?.mode === "fullscreen";
+        const verb = this.collapsed ? "expand" : "collapse";
+        const hint = clickable ? `click to ${verb}` : `${TOGGLE_KEY} to ${verb}`;
         const lines: string[] = [];
+        this.hints = [];
+        const titled = (prefix: string, command: string) => {
+          const room = width - visibleWidth(prefix) - visibleWidth(hint) - 2;
+          if (room < MIN_TEXT_WIDTH) return `${prefix}${command}`;
+          const shown = truncateToWidth(command, room);
+          const start = visibleWidth(prefix) + visibleWidth(shown) + 2;
+          const row = lines.length;
+          if (clickable) this.hints.push({ row, start, end: start + visibleWidth(hint) });
+          const lit = clickable && row === this.hovered;
+          return `${prefix}${shown}  ${lit ? theme.fg("text", theme.bold(hint)) : theme.fg("dim", hint)}`;
+        };
         for (const { details, planned } of this.runs.values()) {
           const command = theme.fg("toolTitle", theme.bold(details.command));
           if (this.collapsed) {
-            const prefix = `${theme.fg("accent", "▸")} ${statusLine(details, now, theme)}  `;
-            lines.push(withHint(prefix, command, `${TOGGLE_KEY} or click to expand`, width, theme));
+            lines.push(
+              titled(`${theme.fg("accent", "▸")} ${statusLine(details, now, theme)}  `, command),
+            );
             continue;
           }
           const [status, ...body] = renderProgress(details, { expanded, now }, theme);
-          const prefix = `${theme.fg("accent", "▾")} `;
-          lines.push(
-            withHint(prefix, command, `${TOGGLE_KEY} or click to collapse`, width, theme),
-            status,
-          );
+          lines.push(titled(`${theme.fg("accent", "▾")} `, command), status);
           if (planned !== undefined) {
             const limit = expanded ? MAX_BODY_ROWS.expanded : MAX_BODY_ROWS.collapsed;
             lines.push(...fit(body, Math.min(limit, planned), theme));
@@ -95,22 +164,10 @@ export class ProgressWidget {
         }
         return lines.map((line) => truncateToWidth(line, width));
       },
-      // Mouse events only arrive in fullscreen mode; the shortcut works everywhere.
-      handleMouse: (event) => {
-        if (event.type !== "click" || event.button !== "left") return undefined;
-        this.toggle();
-        return { handled: true };
-      },
+      handleMouse: (event) => this.handleMouse(event),
       invalidate() {},
     };
   }
-}
-
-/** Cuts `text` rather than the hint after it, so long commands do not hide how to toggle. */
-function withHint(prefix: string, text: string, hint: string, width: number, theme: Theme): string {
-  const room = width - visibleWidth(prefix) - visibleWidth(hint) - 2;
-  if (room < MIN_TEXT_WIDTH) return `${prefix}${text}`;
-  return `${prefix}${truncateToWidth(text, room)}  ${theme.fg("dim", hint)}`;
 }
 
 /** Undefined until Nix starts a build or download; by then it has listed everything it plans. */
