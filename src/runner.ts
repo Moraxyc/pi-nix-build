@@ -56,6 +56,14 @@ export async function runNix(options: {
   };
   if (options.signal?.aborted) cancel();
   else options.signal?.addEventListener("abort", cancel, { once: true });
+  // A child does not get a signal when pi exits, and would keep building.
+  const stopOnExit = () => child.kill("SIGINT");
+  process.once("exit", stopOnExit);
+  const detach = () => {
+    clearTimeout(killTimer);
+    options.signal?.removeEventListener("abort", cancel);
+    process.off("exit", stopOnExit);
+  };
 
   let stdout = "";
   child.stdout.setEncoding("utf8");
@@ -74,7 +82,7 @@ export async function runNix(options: {
 
   const done = new Promise<NixExit>((resolve, reject) => {
     child.on("error", (error: NodeJS.ErrnoException) => {
-      options.signal?.removeEventListener("abort", cancel);
+      detach();
       log.end();
       reject(
         error.code === "ENOENT"
@@ -85,8 +93,7 @@ export async function runNix(options: {
       );
     });
     child.on("close", (code) => {
-      clearTimeout(killTimer);
-      options.signal?.removeEventListener("abort", cancel);
+      detach();
       log.end(() => resolve({ code, cancelled, stdout, plainStderr }));
     });
   });
