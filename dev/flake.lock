@@ -19,9 +19,26 @@
         "type": "github"
       }
     },
+    "nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1795659366,
+        "narHash": "sha256-McJb9pITAB8Sjl6KBwZo4fmBYlgwwLzDbRpnjmISjfo=",
+        "owner": "NixOS",
+        "repo": "nix",
+        "rev": "6caad7444cef13b797c4bf4680a79541609d712e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "repo": "nix",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "git-hooks-nix": "git-hooks-nix",
+        "nix": "nix",
         "treefmt-nix": "treefmt-nix"
       }
     },

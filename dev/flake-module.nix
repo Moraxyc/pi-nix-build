@@ -3,6 +3,7 @@
   imports = [
     inputs.treefmt-nix.flakeModule
     inputs.git-hooks-nix.flakeModule
+    ./checks.nix
   ];
 
   perSystem =
