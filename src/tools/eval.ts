@@ -1,6 +1,5 @@
 import { writeFile } from "node:fs/promises";
 import {
-  DEFAULT_MAX_BYTES,
   type ExtensionAPI,
   formatSize,
   truncateHead,
@@ -15,6 +14,11 @@ import type { ProgressWidget } from "../widget.ts";
 import { evalCommand, evalParameters } from "./eval-command.ts";
 
 const COLLAPSED_VALUE_LINES = 5;
+/**
+ * Start of a one-line value too large to return, such as JSON: enough to see its shape. Lines of a
+ * multi-line value are whole, so that cut keeps the usual limit.
+ */
+const ONE_LINE_PREVIEW_CHARS = 2_000;
 
 export function registerEvalTool(pi: ExtensionAPI, widget: ProgressWidget): void {
   pi.registerTool({
@@ -106,9 +110,8 @@ async function valueText({ stdout, details }: FinishedBuild): Promise<string> {
   if (!cut.truncated) return value;
   const file = details.logFile.replace(/\.log$/, ".out");
   await writeFile(file, stdout);
-  // A JSON value is a single line: keep its start instead of nothing.
   const shown = cut.firstLineExceedsLimit
-    ? truncateLine(value.split("\n", 1)[0], DEFAULT_MAX_BYTES).text
+    ? truncateLine(value.split("\n", 1)[0], ONE_LINE_PREVIEW_CHARS).text
     : cut.content;
   return [
     shown,

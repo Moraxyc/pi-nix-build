@@ -49,7 +49,7 @@
 ### 执行行为与返回值
 
 - **命令调用**：执行 `nix eval <installable> [--json | --raw] [--apply <fn>]` 或 `nix-instantiate --eval --strict --read-write-mode [--json]`。`--strict` 完整求值嵌套值，否则嵌套值显示为 `<CODE>` 或无法转为 JSON；`--read-write-mode` 允许 IFD（import from derivation）写入 `.drv` 文件，`--eval` 默认打开的只读 Store 会拒绝写入。日志参数与 stderr 日志文件与 `nix_build` 相同。
-- **求值成功**：按 Nix 的输出原样返回结果。超过 50 KB 或 2000 行时截断，完整结果保存在日志旁的 `<timestamp>-<pid>.out`。
+- **求值成功**：按 Nix 的输出原样返回结果。超过 50 KB 或 2000 行时截断，完整结果保存在日志旁的 `<timestamp>-<pid>.out`。多行结果保留不超过该上限的开头若干行；单行结果（如 JSON）只保留前 2000 个字符。
 - **求值失败**：返回与 `nix_build` 相同的摘要：带调用栈的 Nix 报错、失败的 IFD 构建及其日志，以及完整日志路径。
 - **进度展示**：工具行显示已求值的文件数；仅当求值过程中获取源码、构建或下载 Store 路径时才显示进度组件。
 - **取消与退出**：与 `nix_build` 相同。不支持后台模式；耗时较长的 IFD 构建请改用 `nix_build`。

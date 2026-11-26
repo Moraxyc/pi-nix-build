@@ -49,7 +49,7 @@ Evaluates a Nix value with `nix eval` or `nix-instantiate --eval` and returns it
 ### Behavior and Output
 
 - **Invocation**: Runs `nix eval <installable> [--json | --raw] [--apply <fn>]` or `nix-instantiate --eval --strict --read-write-mode [--json]`. `--strict` evaluates nested values in full; without it they print as `<CODE>` or fail to convert to JSON. `--read-write-mode` lets import from derivation (IFD) write its `.drv` files; the read-only store that `--eval` opens rejects them. Logging flags and the stderr log file are the same as for `nix_build`.
-- **Success**: Returns the value as Nix printed it. A value over 50 KB or 2000 lines is cut, and the full value is saved next to the log as `<timestamp>-<pid>.out`.
+- **Success**: Returns the value as Nix printed it. A value over 50 KB or 2000 lines is cut, and the full value is saved next to the log as `<timestamp>-<pid>.out`. A multi-line value keeps its first lines up to that limit; a value on one line, such as JSON, keeps only its first 2000 characters.
 - **Failure**: Returns the same summary as `nix_build`: Nix's error with its trace, failed IFD builds with their logs, and the full log path.
 - **Progress**: The tool row shows the number of evaluated files. The progress widget appears only once evaluation fetches a source or builds or downloads a store path.
 - **Cancellation**: Same as `nix_build`. There is no background mode; run long IFD builds with `nix_build`.
