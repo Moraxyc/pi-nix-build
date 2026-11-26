@@ -1,7 +1,11 @@
 {
   "name": "pi-nix-build",
   "version": "0.1.0",
-  "private": true,
+  "description": "pi extension for Nix builds with live progress",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Moraxyc/pi-nix-build.git"
+  },
   "type": "module",
   "keywords": [
     "pi-package"

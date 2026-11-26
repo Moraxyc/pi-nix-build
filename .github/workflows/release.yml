@@ -1,0 +1,155 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Never cancel a release halfway through publishing.
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Check and pack
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.manifest.outputs.version }}
+      tarball: ${{ steps.pack.outputs.tarball }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Reclaim disk space with Nothing but Nix
+        uses: wimpysworld/nothing-but-nix@b2574ec1cf1462bee0a34de0fb6ff11ad3c43cb2 # v12
+
+      - name: Install Nix
+        uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1
+        with:
+          extra-conf: |
+            build-dir = /nix/build
+            access-tokens = github.com=${{ github.token }}
+
+      - name: Check tag matches package.json
+        id: manifest
+        run: |
+          set -euo pipefail
+          name=$(nix eval --raw .#default.pname)
+          version=$(nix eval --raw .#default.version)
+          if [[ "$version" != "${GITHUB_REF_NAME#v}" ]]; then
+            echo "::error::package.json version $version does not match tag $GITHUB_REF_NAME"
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Run flake checks
+        run: nix flake check --print-build-logs
+
+      - name: Pack the Nix-built package
+        id: pack
+        shell: nix shell --inputs-from . nixpkgs#nodejs --command bash -euo pipefail {0}
+        env:
+          NAME: ${{ steps.manifest.outputs.name }}
+        run: |
+          out=$(nix build --no-link --print-out-paths .#default)
+          mkdir -p dist
+          tarball=$(npm pack --ignore-scripts --pack-destination dist "$out/lib/node_modules/$NAME")
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+
+      - name: Upload tarball
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: npm-tarball
+          path: dist/${{ steps.pack.outputs.tarball }}
+          if-no-files-found: error
+
+  npm:
+    name: Publish to npm
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # npm trusted publishing (OIDC); also signs provenance.
+      id-token: write
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      TARBALL: dist/${{ needs.build.outputs.tarball }}
+    steps:
+      # Only for `--inputs-from .`, so npm comes from the pinned nixpkgs.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1
+        with:
+          extra-conf: |
+            access-tokens = github.com=${{ github.token }}
+
+      - name: Download tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: npm-tarball
+          path: dist
+
+      - name: Publish to npm
+        shell: nix shell --inputs-from . nixpkgs#nodejs --command bash -euo pipefail {0}
+        run: |
+          tag=latest
+          if [[ "$VERSION" == *-* ]]; then tag=next; fi
+          npm publish "$TARBALL" --access public --tag "$tag"
+
+  github:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      TARBALL: dist/${{ needs.build.outputs.tarball }}
+    steps:
+      # Only for `--inputs-from .`, so gh comes from the pinned nixpkgs.
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Nix
+        uses: NixOS/nix-installer-action@62c1943b776c509394b550f3f983adc14e9212d6 # v1
+        with:
+          extra-conf: |
+            access-tokens = github.com=${{ github.token }}
+
+      - name: Download tarball
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: npm-tarball
+          path: dist
+
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@f418cff399f7aef4c2f0ad47e25ca7a6abbdd6fc # v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      - name: Publish GitHub Release
+        shell: nix shell --inputs-from . nixpkgs#gh --command bash -euo pipefail {0}
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_REPO: ${{ github.repository }}
+        # Immutable releases freeze assets on publish, so attach them to a draft first.
+        run: |
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
+          gh release create "$GITHUB_REF_NAME" "$TARBALL" --draft --verify-tag \
+            --title "$GITHUB_REF_NAME" --generate-notes "${prerelease[@]}"
+          gh release edit "$GITHUB_REF_NAME" --draft=false

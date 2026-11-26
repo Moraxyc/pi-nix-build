@@ -13,6 +13,7 @@ buildNpmPackage (finalAttrs: {
     fileset = lib.fileset.unions [
       ../package.json
       ../package-lock.json
+      ../README.md
       ../src
     ];
   };
