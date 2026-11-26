@@ -207,7 +207,9 @@ export class DetailView implements Component {
         const last = i === nodes.length - 1;
         const branch = root ? "" : border(last ? "└─ " : "├─ ");
         const estimateMs =
-          build.status === "running" ? this.run.estimate(build.name, build.host) : undefined;
+          build.status === "running" || (this.run.details().dryRun && build.status === "planned")
+            ? this.run.estimate(build.name, build.host)
+            : undefined;
         lines.push({
           drv: node.drv,
           text: `${indent}${branch}${treeRow({ ...build, estimateMs }, now, this.theme)}`,

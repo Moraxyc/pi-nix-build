@@ -1,11 +1,18 @@
 import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth } from "@earendil-works/pi-tui";
-import { type BuildDetails, type BuildView, type TransferView, total } from "./details.ts";
+import {
+  type BuildDetails,
+  type BuildView,
+  dryRunEstimate,
+  sumEstimates,
+  type TransferView,
+  total,
+} from "./details.ts";
 import { formatBytes, formatDuration, formatPeer } from "./format.ts";
 import { ICONS } from "./icons.ts";
 import { STDENV_PHASES } from "./nix/state.ts";
 import { pathInStore } from "./nix/store.ts";
-import type { TreeNode } from "./tree.ts";
+import { pruneForest, type TreeNode } from "./tree.ts";
 
 const PROGRESS_BAR_WIDTH = 20;
 /** Log lines per running build while expanded. */
@@ -13,6 +20,8 @@ const EXPANDED_RUNNING_LOG = 5;
 /** Log lines per failed build while collapsed; expanded shows all kept lines. */
 const COLLAPSED_FAILED_LOG = 8;
 const COLLAPSED_OUTPUTS = 3;
+const COLLAPSED_DRY_RUN_LINES = 8;
+const EXPANDED_DRY_RUN_LINES = 60;
 
 const PHASE_COLORS: Record<string, ThemeColor> = {
   unpackPhase: "muted",
@@ -146,7 +155,15 @@ export function treeRow(build: BuildView, now: number, theme: Theme): string {
     case "failed":
       return failedRow(build, theme);
     case "planned":
-      return `${theme.fg("dim", ICONS.waiting)} ${theme.fg("muted", build.name)}  ${theme.fg("dim", "waiting")}`;
+      return withMeta(
+        `${theme.fg("dim", ICONS.waiting)} ${theme.fg("muted", build.name)}`,
+        [
+          build.estimateMs !== undefined
+            ? theme.fg("dim", `~${formatDuration(build.estimateMs)}`)
+            : theme.fg("dim", "waiting"),
+        ],
+        theme,
+      );
     case "blocked":
       return `${theme.fg("warning", ICONS.blocked)} ${theme.fg("muted", build.name)}  ${theme.fg("warning", "dependency failed")}`;
     case "done":
@@ -170,6 +187,18 @@ function logTail(build: BuildView, expanded: boolean, theme: Theme, indent: stri
 export function finishedLine(details: BuildDetails, theme: Theme): string {
   const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
   const { builds, downloads, bytesDone } = details.counts;
+  if (details.dryRun && details.status === "succeeded") {
+    const estimate = dryRunEstimate(details);
+    const est =
+      estimate.totalMs !== undefined
+        ? ` (${theme.fg("dim", `~${formatDuration(estimate.totalMs)} est.`)})`
+        : "";
+    const work = [
+      `${theme.fg("warning", String(builds.planned))} to build`,
+      `${theme.fg("accent", String(downloads.planned))} to fetch`,
+    ];
+    return `${theme.fg("success", ICONS.done)} ${work.join(", ")}${est} in ${theme.fg("syntaxNumber", took)}`;
+  }
   const bytes = bytesDone > 0 ? ` (${theme.fg("syntaxNumber", formatBytes(bytesDone))})` : "";
   const work = [
     `${theme.fg("success", String(builds.done))} built`,
@@ -194,6 +223,33 @@ function renderFinished(
   theme: Theme,
 ): string[] {
   const lines = [finishedLine(details, theme)];
+
+  if (details.dryRun && details.status === "succeeded" && details.tree?.length) {
+    const byDrv = new Map(details.builds.map((build) => [build.drv, build]));
+    const pruned = pruneForest(
+      details.tree,
+      expanded ? EXPANDED_DRY_RUN_LINES : COLLAPSED_DRY_RUN_LINES,
+    );
+    for (const row of pruned.rows) {
+      const build = byDrv.get(row.drv);
+      const name = build?.name ?? row.drv;
+      const own =
+        build?.estimateMs !== undefined
+          ? theme.fg("dim", `~${formatDuration(build.estimateMs)}`)
+          : undefined;
+      let hidden: string | undefined;
+      if (row.hiddenDescendants > 0) {
+        const subEst = sumEstimates(row.hiddenDrvs, byDrv);
+        const estPart = subEst !== undefined ? `, ~${formatDuration(subEst)}` : "";
+        hidden = theme.fg("dim", `+${row.hiddenDescendants} deps${estPart}`);
+      }
+      const lead = `  ${theme.fg("borderMuted", row.prefix)}${theme.fg("dim", ICONS.waiting)} ${theme.fg("muted", name)}`;
+      lines.push(withMeta(lead, [own, hidden], theme));
+    }
+    if (pruned.omittedRoots > 0) {
+      lines.push(theme.fg("dim", `  … ${pruned.omittedRoots} more top-level derivations`));
+    }
+  }
 
   const outputs = expanded ? details.outputs : details.outputs.slice(0, COLLAPSED_OUTPUTS);
   for (const output of outputs) lines.push(`  ${theme.fg("mdLinkUrl", output)}`);
