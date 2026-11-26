@@ -109,7 +109,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
       },
       {
         inputsOf: (drv) => graph.inputsOf(drv),
-        estimate: (name, host) => durations.estimate(name, host),
+        estimate: (name, host) => durations.estimate(name, host, Boolean(command.dryRun)),
         failedLogs,
       },
     );
@@ -121,7 +121,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
     state: run.state,
     details: () => latest,
     inputsOf: (drv) => graph.inputsOf(drv),
-    estimate: (name, host) => durations.estimate(name, host),
+    estimate: (name, host) => durations.estimate(name, host, Boolean(command.dryRun)),
   };
 
   let lastUpdate = 0;

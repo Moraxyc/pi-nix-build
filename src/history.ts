@@ -64,11 +64,22 @@ export class DurationHistory {
     return new DurationHistory(file, (await readHistory(file)).durations);
   }
 
-  estimate(name: string, host: string | undefined): number | undefined {
+  estimate(name: string, host: string | undefined, anyHost = false): number | undefined {
     const exact = this.durations[key(name, host)];
     if (exact?.length) return median(exact);
     const similar = this.byPname.get(key(pname(name), host));
-    return similar?.length ? median(similar) : undefined;
+    if (similar?.length) return median(similar);
+    if (!anyHost) return undefined;
+    const prefix = `${name}@`;
+    const anyExact = Object.entries(this.durations)
+      .filter(([entry]) => entry.startsWith(prefix))
+      .flatMap(([, runs]) => runs);
+    if (anyExact.length) return median(anyExact);
+    const base = `${pname(name)}@`;
+    const anySimilar = [...this.byPname.entries()]
+      .filter(([entry]) => entry.startsWith(base))
+      .flatMap(([, runs]) => runs);
+    return anySimilar.length ? median(anySimilar) : undefined;
   }
 
   /** Merges with the file on disk first, so concurrent pi sessions do not drop each other's runs. */
