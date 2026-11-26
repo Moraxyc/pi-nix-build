@@ -5,16 +5,12 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { commandLabel, displayCommand } from "../../src/build-run.ts";
 import { type BuildDetails, snapshot } from "../../src/details.ts";
 import type { LiveRun } from "../../src/live.ts";
 import { ActivityType, parseLine, ResultType, Verbosity } from "../../src/nix/events.ts";
 import { BuildState } from "../../src/nix/state.ts";
-import {
-  type BuildParams,
-  buildCommand,
-  commandLabel,
-  displayCommand,
-} from "../../src/tools/build-command.ts";
+import { type BuildParams, buildCommand } from "../../src/tools/build-command.ts";
 
 const NIX_BASE32 = "0123456789abcdfghijklmnpqrsvwxyz";
 

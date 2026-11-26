@@ -1,6 +1,6 @@
 import { type Static, Type } from "typebox";
+import type { BuildCommand } from "../build-run.ts";
 import { StringEnum } from "../schema.ts";
-import type { BuildCommand } from "./build-command.ts";
 import { isLegacySource, legacySourceArgs, legacySourceParameters } from "./legacy-source.ts";
 
 export const evalParameters = Type.Object({

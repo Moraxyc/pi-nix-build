@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { progressText, startBuild } from "../build-run.ts";
+import { progressText, startCommand } from "../build-run.ts";
 import type { BuildDetails } from "../details.ts";
 import { singleLine } from "../format.ts";
 import { type JobManager, watchLines } from "../jobs/manager.ts";
@@ -47,8 +47,9 @@ export function registerBuildTool(
       if (params.notify && !params.background) {
         throw new Error("notify applies to background builds; pass background: true.");
       }
+      const command = buildCommand(params);
       if (params.background) {
-        const job = await jobs.start(params, params.notify ?? {}, ctx);
+        const job = await jobs.start(command, params.notify ?? {}, ctx);
         return {
           content: [
             {
@@ -63,7 +64,7 @@ export function registerBuildTool(
           details: undefined,
         };
       }
-      const run = await startBuild(params, {
+      const run = await startCommand(command, {
         cwd: ctx.cwd,
         signal,
         onTick: (details) => {

@@ -3,11 +3,15 @@ import type {
   ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
-import { type BuildRun, type FinishedBuild, startBuild } from "../build-run.ts";
+import {
+  type BuildCommand,
+  type BuildRun,
+  type FinishedBuild,
+  startCommand,
+} from "../build-run.ts";
 import type { BuildDetails } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
 import type { Build, Status } from "../nix/state.ts";
-import type { BuildParams } from "../tools/build-command.ts";
 import type { ProgressWidget } from "../widget.ts";
 import { AdoptedProcess } from "./processes.ts";
 import {
@@ -67,7 +71,7 @@ export class JobManager {
     this.widget = widget;
   }
 
-  async start(params: BuildParams, notify: JobNotify, ctx: ExtensionContext): Promise<Job> {
+  async start(command: BuildCommand, notify: JobNotify, ctx: ExtensionContext): Promise<Job> {
     const id = `nix-${this.nextId}`;
     // Checked before Nix starts, so a bad watch fails the call instead of the job.
     const watches = new WatchSet(notify.watches ?? [], Date.now());
@@ -75,7 +79,7 @@ export class JobManager {
     const controller = new AbortController();
     const statuses = new Map<string, Status>();
     let job: Job | undefined;
-    const run = await startBuild(params, {
+    const run = await startCommand(command, {
       cwd: ctx.cwd,
       signal: controller.signal,
       detached: true,

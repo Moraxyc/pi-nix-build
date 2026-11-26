@@ -1,6 +1,5 @@
 import { type Static, Type } from "typebox";
-import { singleLine } from "../format.ts";
-import type { NixProgram } from "../runner.ts";
+import type { BuildCommand } from "../build-run.ts";
 import { isLegacySource, legacySourceArgs, legacySourceParameters } from "./legacy-source.ts";
 
 export const buildParameters = Type.Object({
@@ -23,15 +22,6 @@ export const buildParameters = Type.Object({
 });
 
 export type BuildParams = Static<typeof buildParameters>;
-
-export interface BuildCommand {
-  program: NixProgram;
-  args: string[];
-  title: string;
-  /** Arguments as the user would type them, without output and logging flags. */
-  shownArgs: string[];
-  parseOutputs(stdout: string): string[];
-}
 
 /** Flake installables go to `nix build`; file, expr and attrs go to `nix-build`. */
 export function buildCommand(params: BuildParams): BuildCommand {
@@ -62,17 +52,6 @@ export function buildCommand(params: BuildParams): BuildCommand {
     shownArgs: [...installables, ...extra],
     parseOutputs: parseBuildJson,
   };
-}
-
-/** One row: a multi-line `-E` expression would break the layout of every place it is shown. */
-export function displayCommand(command: BuildCommand): string {
-  return singleLine([command.title, ...command.shownArgs].join(" "));
-}
-
-/** The command with an `-E` expression folded to `…`; the widget row cuts it anyway. */
-export function commandLabel(command: BuildCommand): string {
-  const args = command.shownArgs.map((arg, i, all) => (all[i - 1] === "-E" ? "…" : arg));
-  return singleLine([command.title, ...args].join(" "));
 }
 
 /** `nix build --json` prints `[{ drvPath, outputs: { out: path } }]`. */

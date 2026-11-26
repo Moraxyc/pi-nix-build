@@ -1,24 +1,37 @@
 import { DEFAULT_MAX_BYTES, truncateTail } from "@earendil-works/pi-coding-agent";
 import { type BuildDetails, type RunStatus, snapshot, total } from "./details.ts";
-import { formatDuration, formatPeer } from "./format.ts";
+import { formatDuration, formatPeer, singleLine } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { DependencyGraph } from "./nix/graph.ts";
 import type { BuildState } from "./nix/state.ts";
-import { runNix } from "./runner.ts";
-import {
-  type BuildCommand,
-  type BuildParams,
-  buildCommand,
-  commandLabel,
-  displayCommand,
-} from "./tools/build-command.ts";
+import { type NixProgram, runNix } from "./runner.ts";
 
 /** Snapshots are throttled; timers on screen need one per second. */
 const UPDATE_INTERVAL_MS = 200;
 const TIMER_INTERVAL_MS = 1_000;
 
 let history: Promise<DurationHistory> | undefined;
+
+export interface BuildCommand {
+  program: NixProgram;
+  args: string[];
+  title: string;
+  /** Arguments as the user would type them, without output and logging flags. */
+  shownArgs: string[];
+  parseOutputs(stdout: string): string[];
+}
+
+/** One row: a multi-line `-E` expression would break the layout of every place it is shown. */
+export function displayCommand(command: BuildCommand): string {
+  return singleLine([command.title, ...command.shownArgs].join(" "));
+}
+
+/** The command with an `-E` expression folded to `…`; the widget row cuts it anyway. */
+export function commandLabel(command: BuildCommand): string {
+  const args = command.shownArgs.map((arg, i, all) => (all[i - 1] === "-E" ? "…" : arg));
+  return singleLine([command.title, ...args].join(" "));
+}
 
 export interface BuildRun {
   command: BuildCommand;
@@ -45,10 +58,6 @@ export interface RunOptions {
   detached?: boolean;
   /** Called with each new snapshot while the build runs. */
   onTick: (details: BuildDetails) => void;
-}
-
-export function startBuild(params: BuildParams, options: RunOptions): Promise<BuildRun> {
-  return startCommand(buildCommand(params), options);
 }
 
 /** Starts Nix and keeps a snapshot of its progress until it exits. */
