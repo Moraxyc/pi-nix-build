@@ -1,9 +1,12 @@
 import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
-import { type Component, type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import { type Component, type TUI, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { type BuildDetails, total } from "./details.ts";
-import { renderProgress } from "./render.ts";
+import { renderProgress, statusLine } from "./render.ts";
 
 const WIDGET_KEY = "pi-nix-build";
+export const TOGGLE_KEY = "ctrl+shift+b";
+/** Below this, the hint is dropped instead of squeezing the text further. */
+const MIN_TEXT_WIDTH = 20;
 /** Upper bounds for the rows below a build's status line. */
 const MAX_BODY_ROWS = { collapsed: 10, expanded: 30 };
 
@@ -22,6 +25,8 @@ interface Run {
  */
 export class ProgressWidget {
   private readonly runs = new Map<string, Run>();
+  /** One line per build instead of the tree; kept for the rest of the pi process. */
+  private collapsed = false;
   private ui: ExtensionUIContext | undefined;
   private tui: TUI | undefined;
 
@@ -50,6 +55,13 @@ export class ProgressWidget {
     this.clear();
   }
 
+  /** Switches between one line per build and the full tree; returns whether it is now collapsed. */
+  toggle(): boolean {
+    this.collapsed = !this.collapsed;
+    this.tui?.requestRender();
+    return this.collapsed;
+  }
+
   clear(): void {
     this.runs.clear();
     this.ui?.setWidget(WIDGET_KEY, undefined);
@@ -64,8 +76,18 @@ export class ProgressWidget {
         const expanded = ui.getToolsExpanded();
         const lines: string[] = [];
         for (const { details, planned } of this.runs.values()) {
+          const command = theme.fg("toolTitle", theme.bold(details.command));
+          if (this.collapsed) {
+            const prefix = `${theme.fg("accent", "▸")} ${statusLine(details, now, theme)}  `;
+            lines.push(withHint(prefix, command, `${TOGGLE_KEY} or click to expand`, width, theme));
+            continue;
+          }
           const [status, ...body] = renderProgress(details, { expanded, now }, theme);
-          lines.push(theme.fg("toolTitle", theme.bold(details.command)), status);
+          const prefix = `${theme.fg("accent", "▾")} `;
+          lines.push(
+            withHint(prefix, command, `${TOGGLE_KEY} or click to collapse`, width, theme),
+            status,
+          );
           if (planned !== undefined) {
             const limit = expanded ? MAX_BODY_ROWS.expanded : MAX_BODY_ROWS.collapsed;
             lines.push(...fit(body, Math.min(limit, planned), theme));
@@ -73,9 +95,22 @@ export class ProgressWidget {
         }
         return lines.map((line) => truncateToWidth(line, width));
       },
+      // Mouse events only arrive in fullscreen mode; the shortcut works everywhere.
+      handleMouse: (event) => {
+        if (event.type !== "click" || event.button !== "left") return undefined;
+        this.toggle();
+        return { handled: true };
+      },
       invalidate() {},
     };
   }
+}
+
+/** Cuts `text` rather than the hint after it, so long commands do not hide how to toggle. */
+function withHint(prefix: string, text: string, hint: string, width: number, theme: Theme): string {
+  const room = width - visibleWidth(prefix) - visibleWidth(hint) - 2;
+  if (room < MIN_TEXT_WIDTH) return `${prefix}${text}`;
+  return `${prefix}${truncateToWidth(text, room)}  ${theme.fg("dim", hint)}`;
 }
 
 /** Undefined until Nix starts a build or download; by then it has listed everything it plans. */
