@@ -22,3 +22,8 @@ export function formatBytes(bytes: number): string {
 export function formatPeer(uri: string): string {
   return uri.replace(/^[a-z][a-z0-9+.-]*:\/\//, "").replace(/\/$/, "");
 }
+
+/** Collapses whitespace, newlines included, so a multi-line `-E` expression fits on one row. */
+export function singleLine(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}

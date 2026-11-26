@@ -1,4 +1,5 @@
 import { type Static, Type } from "typebox";
+import { singleLine } from "../format.ts";
 
 export const buildParameters = Type.Object({
   installables: Type.Optional(
@@ -81,8 +82,9 @@ export function buildCommand(params: BuildParams): BuildCommand {
   };
 }
 
+/** One row: a multi-line `-E` expression would break the layout of every place it is shown. */
 export function displayCommand(command: BuildCommand): string {
-  return [command.title, ...command.shownArgs].join(" ");
+  return singleLine([command.title, ...command.shownArgs].join(" "));
 }
 
 /** `nix build --json` prints `[{ drvPath, outputs: { out: path } }]`. */

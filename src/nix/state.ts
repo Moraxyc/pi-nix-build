@@ -17,6 +17,23 @@ export const STDENV_PHASES = [
 
 const LOG_TAIL_LINES = 200;
 
+const TAB_WIDTH = 8;
+
+/**
+ * One terminal row of builder output: escape sequences removed, the text after the last carriage
+ * return kept (progress bars redraw with \r), tabs expanded, and other control characters dropped.
+ */
+function logLine(raw: string): string {
+  const text = stripVTControlCharacters(raw);
+  const shown = text.slice(text.lastIndexOf("\r") + 1);
+  let line = "";
+  for (const char of shown) {
+    if (char === "\t") line += " ".repeat(TAB_WIDTH - (line.length % TAB_WIDTH));
+    else if (char >= " " && char !== "\x7f") line += char;
+  }
+  return line;
+}
+
 /** `blocked`: not built because a dependency failed. */
 export type Status = "planned" | "running" | "done" | "failed" | "blocked";
 
@@ -218,7 +235,7 @@ export class BuildState {
       }
       case ResultType.BuildLogLine:
       case ResultType.PostBuildLogLine:
-        build.log.push(stripVTControlCharacters(String(first)));
+        build.log.push(logLine(String(first)));
         if (build.log.length > LOG_TAIL_LINES) build.log.shift();
         return;
     }

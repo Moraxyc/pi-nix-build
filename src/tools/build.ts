@@ -5,7 +5,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type BuildDetails, type RunStatus, snapshot, total } from "../details.ts";
-import { formatDuration, formatPeer } from "../format.ts";
+import { formatDuration, formatPeer, singleLine } from "../format.ts";
 import { DurationHistory, type Sample } from "../history.ts";
 import type { LiveRun } from "../live.ts";
 import { DependencyGraph } from "../nix/graph.ts";
@@ -184,7 +184,11 @@ export function registerBuildTool(pi: ExtensionAPI, widget: ProgressWidget): voi
       } catch {
         // Invalid argument combinations are reported by execute().
       }
-      return new Text(`${theme.fg("toolTitle", theme.bold(title))} ${shown.join(" ")}`, 0, 0);
+      return new Text(
+        `${theme.fg("toolTitle", theme.bold(title))} ${singleLine(shown.join(" "))}`,
+        0,
+        0,
+      );
     },
 
     renderResult(result, { expanded }, theme) {
