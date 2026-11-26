@@ -71,6 +71,7 @@ Two separate controls govern widget density:
 | Key                    | Action                                                                         |
 | ---------------------- | ------------------------------------------------------------------------------ |
 | `↑` / `↓` or `k` / `j` | Move selection in the dependency tree.                                         |
+| `←` / `→` or `h` / `l` | Scroll the tree sideways. Moving the selection also does, to keep it in view.  |
 | `PgUp` / `PgDn`        | Scroll the log pane by one page.                                               |
 | `g` / `Home`           | Jump to the top of the log.                                                    |
 | `G` / `End`            | Jump to the bottom of the log and resume auto-follow.                          |
@@ -85,7 +86,7 @@ To stay light, memory holds only the last 80 lines of each build, and only for f
 pi delivers mouse events to components only in fullscreen TUI mode:
 
 - **Widget**: Left-click the command title to expand or fold that build; left-click `⤢ details` in the footer to open the detail view.
-- **Detail view**: Left-click a derivation row to view its log; scroll the wheel over the tree pane to change selection or over the log pane to scroll logs.
+- **Detail view**: Left-click a derivation row to view its log; scroll the wheel over the tree pane to change selection or over the log pane to scroll logs; hold `Shift` over the tree pane to scroll it sideways.
 
 ## Duration History and Estimates
 

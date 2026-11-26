@@ -5,9 +5,11 @@ import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent"
 import {
   type Component,
   matchesKey,
+  sliceByColumn,
   type TUI,
   type TuiMouseEvent,
   truncateToWidth,
+  visibleWidth,
 } from "@earendil-works/pi-tui";
 import { formatPeer } from "./format.ts";
 import type { LiveRun } from "./live.ts";
@@ -23,6 +25,10 @@ const TREE_PANE_MAX_WIDTH = 70;
 /** Title, status, rule, and footer. */
 const CHROME_ROWS = 4;
 const WHEEL_LINES = 3;
+/** Two levels of tree indentation. */
+const PAN_COLUMNS = 6;
+/** Columns of the selected row kept visible after its indentation, up to half the pane. */
+const NAME_ROOM = 32;
 
 type Viewer = "pager" | "editor";
 
@@ -30,6 +36,8 @@ interface TreeLine {
   /** Unset for rows that cannot be selected, such as transfers. */
   drv?: string;
   text: string;
+  /** Width of the indentation and branch before the row's icon. */
+  indent: number;
 }
 
 interface Pane {
@@ -66,6 +74,12 @@ export class DetailView implements Component {
   private notice: string | undefined;
   private opening = false;
   private treeScroll = 0;
+  /** Tree columns hidden left of the visible ones. */
+  private treeColumn = 0;
+  /** How far the shown rows reach past the pane at the last render, to stop panning there. */
+  private treeOverflow = 0;
+  /** Selection the tree was last scrolled to, so panning by hand sticks until it changes. */
+  private followed: string | undefined;
   private rows: TreeLine[] = [];
   private treePane: Pane = { top: 0, left: 0, width: 0, height: 0 };
   private logPane: Pane = { top: 0, left: 0, width: 0, height: 0 };
@@ -146,6 +160,8 @@ export class DetailView implements Component {
     else if (kb.matches(data, "tui.select.down") || data === "j") this.move(1);
     else if (kb.matches(data, "tui.select.pageUp")) this.scrollLog(this.logPane.height - 2);
     else if (kb.matches(data, "tui.select.pageDown")) this.scrollLog(-(this.logPane.height - 2));
+    else if (matchesKey(data, "left") || data === "h") this.panTree(-PAN_COLUMNS);
+    else if (matchesKey(data, "right") || data === "l") this.panTree(PAN_COLUMNS);
     else if (matchesKey(data, "end") || data === "G") this.logScroll = 0;
     else if (matchesKey(data, "home") || data === "g") this.scrollLog(Number.POSITIVE_INFINITY);
     else return;
@@ -157,6 +173,7 @@ export class DetailView implements Component {
     const inTree = inside(this.treePane, event);
     if (event.type === "wheel" && event.wheelDelta) {
       if (inLog) this.scrollLog(-Math.sign(event.wheelDelta) * WHEEL_LINES);
+      else if (inTree && event.shift) this.panTree(Math.sign(event.wheelDelta) * PAN_COLUMNS);
       else if (inTree) this.move(Math.sign(event.wheelDelta));
     } else if (event.type === "click" && event.button === "left" && inTree) {
       const drv = this.rows[this.treeScroll + event.y - this.treePane.top]?.drv;
@@ -168,8 +185,11 @@ export class DetailView implements Component {
   invalidate(): void {}
 
   private footer(): string {
-    const keys = "↑↓ select · PgUp/PgDn scroll log · g/G top/end · o pager · e editor · Esc close";
-    return this.tui.mode === "fullscreen" ? `${keys} · click to select · wheel to scroll` : keys;
+    const keys =
+      "↑↓ select · ←→ scroll tree · PgUp/PgDn scroll log · g/G top/end · o pager · e editor · Esc close";
+    return this.tui.mode === "fullscreen"
+      ? `${keys} · click to select · wheel to scroll, with Shift sideways`
+      : keys;
   }
 
   /** Every build, so finished ones can be inspected too, then running transfers. */
@@ -193,13 +213,14 @@ export class DetailView implements Component {
         lines.push({
           drv: node.drv,
           text: `${indent}${branch}${treeRow({ ...build, estimateMs }, now, this.theme)}`,
+          indent: visibleWidth(indent + branch),
         });
         walk(node.children, root ? indent : indent + border(last ? "   " : "│  "), false);
       });
     };
     walk(forest, " ", true);
     for (const transfer of this.run.details().transfers) {
-      lines.push({ text: ` ${transferRow(transfer, this.theme)}` });
+      lines.push({ text: ` ${transferRow(transfer, this.theme)}`, indent: 1 });
     }
     return lines;
   }
@@ -220,10 +241,30 @@ export class DetailView implements Component {
       if (index >= this.treeScroll + height) this.treeScroll = index - height + 1;
     }
     this.treeScroll = Math.max(0, Math.min(this.treeScroll, this.rows.length - height));
-    return this.rows.slice(this.treeScroll, this.treeScroll + height).map((row) => {
-      if (row.drv !== this.selected) return row.text;
-      return this.theme.bg("selectedBg", fitTo(row.text, this.treePane.width));
+    const { width } = this.treePane;
+    const selected = this.rows[index];
+    if (selected && this.followed !== this.selected) {
+      this.followed = this.selected;
+      this.follow(selected.indent, width);
+    }
+    const shown = this.rows.slice(this.treeScroll, this.treeScroll + height);
+    this.treeOverflow = Math.max(0, ...shown.map((row) => visibleWidth(row.text))) - width;
+    return shown.map((row) => {
+      // The first column marks that the rows continue to the left.
+      const text =
+        this.treeColumn > 0
+          ? `${this.theme.fg("dim", "…")}${sliceByColumn(row.text, this.treeColumn + 1, width - 1)}`
+          : row.text;
+      if (row.drv !== this.selected) return text;
+      return this.theme.bg("selectedBg", fitTo(text, width));
     });
+  }
+
+  /** Scrolls the tree sideways just enough to show the selected row's icon and name. */
+  private follow(indent: number, width: number): void {
+    const room = Math.min(NAME_ROOM, Math.floor(width / 2));
+    if (indent > this.treeColumn + width - room) this.treeColumn = indent - (width - room);
+    else if (indent <= this.treeColumn) this.treeColumn = Math.max(0, indent - PAN_COLUMNS);
   }
 
   private logRows(): string[] {
@@ -331,6 +372,11 @@ export class DetailView implements Component {
 
   private scrollLog(lines: number): void {
     this.logScroll = Math.max(0, this.logScroll + lines);
+  }
+
+  private panTree(columns: number): void {
+    const max = Math.max(this.treeColumn, this.treeOverflow + 1);
+    this.treeColumn = Math.max(0, Math.min(this.treeColumn + columns, max));
   }
 }
 
