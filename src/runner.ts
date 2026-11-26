@@ -11,7 +11,7 @@ import { BuildState } from "./nix/state.ts";
 const KILL_GRACE_MS = 5_000;
 
 export interface NixRun {
-  /** Full argument list after `nix`, including the logging flags added here. */
+  /** Full argument list, including the logging flags added here. */
   args: string[];
   state: BuildState;
   /** Every stderr line, for `nix log`-style inspection after the tool result is truncated. */
@@ -28,6 +28,7 @@ export interface NixExit {
 }
 
 export async function runNix(options: {
+  program: "nix" | "nix-build";
   args: string[];
   cwd: string;
   signal?: AbortSignal;
@@ -42,7 +43,10 @@ export async function runNix(options: {
   const state = new BuildState();
   const plainStderr: string[] = [];
 
-  const child = spawn("nix", args, { cwd: options.cwd, stdio: ["ignore", "pipe", "pipe"] });
+  const child = spawn(options.program, args, {
+    cwd: options.cwd,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
   let cancelled = false;
   let killTimer: NodeJS.Timeout | undefined;
   const cancel = () => {
@@ -74,7 +78,9 @@ export async function runNix(options: {
       log.end();
       reject(
         error.code === "ENOENT"
-          ? new Error("nix is not on PATH. Install Nix or start pi from a shell that provides it.")
+          ? new Error(
+              `${options.program} is not on PATH. Install Nix or start pi from a shell that provides it.`,
+            )
           : error,
       );
     });

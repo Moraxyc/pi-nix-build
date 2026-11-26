@@ -4,46 +4,15 @@ import {
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { Type } from "typebox";
 import { type BuildDetails, type RunStatus, snapshot } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
 import { renderBuild } from "../render.ts";
 import { runNix } from "../runner.ts";
+import { buildCommand, buildParameters, displayCommand } from "./build-command.ts";
 
 /** Partial results are throttled; the renderer needs one per second for timers. */
 const UPDATE_INTERVAL_MS = 200;
 const TIMER_INTERVAL_MS = 1_000;
-
-const parameters = Type.Object({
-  installables: Type.Optional(
-    Type.Array(Type.String(), {
-      description: 'Installables for nix build, e.g. ".#foo" or "nixpkgs#hello". Default ".".',
-    }),
-  ),
-  extraArgs: Type.Optional(
-    Type.Array(Type.String(), {
-      description: 'Extra nix build flags, e.g. ["--impure", "--keep-going", "--rebuild"].',
-    }),
-  ),
-  outLink: Type.Optional(
-    Type.String({ description: "Create this result symlink. By default no symlink is created." }),
-  ),
-});
-
-function buildArgs(installables: string[], extraArgs: string[], outLink?: string): string[] {
-  const link = outLink ? ["--out-link", outLink] : ["--no-link"];
-  return ["build", ...installables, "--json", ...link, ...extraArgs];
-}
-
-/** `nix build --json` prints `[{ drvPath, outputs: { out: path } }]`. */
-function parseOutputs(stdout: string): string[] {
-  try {
-    const results = JSON.parse(stdout) as { outputs?: Record<string, string> }[];
-    return results.flatMap((result) => Object.values(result.outputs ?? {}));
-  } catch {
-    return [];
-  }
-}
 
 function progressText(details: BuildDetails): string {
   const { builds, downloads } = details.counts;
@@ -55,7 +24,7 @@ function progressText(details: BuildDetails): string {
 }
 
 function summarize(details: BuildDetails, plainStderr: string[]): string {
-  const command = `nix build ${details.installables.join(" ")}`;
+  const { command } = details;
   const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
   const { builds, downloads } = details.counts;
   const work = `${builds.done} built, ${downloads.done} fetched`;
@@ -98,19 +67,20 @@ export function registerBuildTool(pi: ExtensionAPI): void {
     name: "nix_build",
     label: "Nix Build",
     description:
-      "Run `nix build` and show live progress to the user. Returns output paths on success. On failure returns the failed derivations with their last log lines, hash mismatches of fixed-output derivations, and the path of the full log.",
+      "Build with `nix build` (flake installables) or `nix-build` (file, expr, attrs) and show live progress to the user. Returns output paths on success. On failure returns the failed derivations with their last log lines, hash mismatches of fixed-output derivations, and the path of the full log.",
     promptSnippet: "Build Nix installables with live progress; returns outputs or failure logs",
     promptGuidelines: [
-      "Use nix_build instead of running `nix build` in bash: the user sees build progress and failures come back with their logs.",
+      "Use nix_build instead of running `nix build` or `nix-build` in bash: the user sees build progress and failures come back with their logs.",
     ],
-    parameters,
+    parameters: buildParameters,
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
-      const installables = params.installables?.length ? params.installables : ["."];
+      const command = buildCommand(params);
       const startedAt = Date.now();
       let dirty = true;
       const run = await runNix({
-        args: buildArgs(installables, params.extraArgs ?? [], params.outLink),
+        program: command.program,
+        args: command.args,
         cwd: ctx.cwd,
         signal,
         onChange: () => {
@@ -118,7 +88,13 @@ export function registerBuildTool(pi: ExtensionAPI): void {
         },
       });
       const current = (status: RunStatus, extra: Partial<BuildDetails> = {}) =>
-        snapshot(run.state, { installables, status, startedAt, logFile: run.logFile, ...extra });
+        snapshot(run.state, {
+          command: displayCommand(command),
+          status,
+          startedAt,
+          logFile: run.logFile,
+          ...extra,
+        });
 
       let lastUpdate = 0;
       const timer = setInterval(() => {
@@ -139,7 +115,7 @@ export function registerBuildTool(pi: ExtensionAPI): void {
             : "failed";
         const details = current(status, {
           finishedAt: Date.now(),
-          outputs: parseOutputs(exit.stdout),
+          outputs: command.parseOutputs(exit.stdout),
         });
         return {
           content: [{ type: "text", text: summarize(details, exit.plainStderr) }],
@@ -152,13 +128,14 @@ export function registerBuildTool(pi: ExtensionAPI): void {
     },
 
     renderCall(args, theme) {
-      const installables = args.installables?.length ? args.installables : ["."];
-      const extra = args.extraArgs?.length ? ` ${theme.fg("dim", args.extraArgs.join(" "))}` : "";
-      return new Text(
-        `${theme.fg("toolTitle", theme.bold("nix build"))} ${installables.join(" ")}${extra}`,
-        0,
-        0,
-      );
+      let title = "nix_build";
+      let shown: string[] = [];
+      try {
+        ({ title, shownArgs: shown } = buildCommand(args));
+      } catch {
+        // Invalid argument combinations are reported by execute().
+      }
+      return new Text(`${theme.fg("toolTitle", theme.bold(title))} ${shown.join(" ")}`, 0, 0);
     },
 
     renderResult(result, { expanded }, theme) {

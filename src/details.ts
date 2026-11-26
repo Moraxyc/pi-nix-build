@@ -38,7 +38,8 @@ export interface Counts {
 }
 
 export interface BuildDetails {
-  installables: string[];
+  /** The command as the user would type it. */
+  command: string;
   status: RunStatus;
   startedAt: number;
   finishedAt?: number;
@@ -61,7 +62,7 @@ function emptyCounts(): Record<Status, number> {
 
 export function snapshot(
   state: BuildState,
-  base: Pick<BuildDetails, "installables" | "status" | "startedAt" | "finishedAt" | "logFile"> & {
+  base: Pick<BuildDetails, "command" | "status" | "startedAt" | "finishedAt" | "logFile"> & {
     outputs?: string[];
   },
 ): BuildDetails {
