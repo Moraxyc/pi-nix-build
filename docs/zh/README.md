@@ -92,11 +92,9 @@ pi install .
 
 ## 文档导航
 
-| 主题                   | English                                                  | 简体中文                                           |
-| ---------------------- | -------------------------------------------------------- | -------------------------------------------------- |
-| 工具、监听与拦截钩子   | [docs/en/tools.md](../en/tools.md)                       | [docs/zh/tools.md](tools.md)                       |
-| 界面、快捷键与耗时历史 | [docs/en/ui-and-shortcuts.md](../en/ui-and-shortcuts.md) | [docs/zh/ui-and-shortcuts.md](ui-and-shortcuts.md) |
-| 开发与架构说明         | [docs/en/development.md](../en/development.md)           | [docs/zh/development.md](development.md)           |
+- [工具、监听与拦截钩子](tools.md)
+- [界面、快捷键与耗时历史](ui-and-shortcuts.md)
+- [开发与架构说明](development.md)
 
 ## 许可证
 

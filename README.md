@@ -1,6 +1,6 @@
 # pi-nix-build
 
-English | [简体中文](docs/zh/README.md)
+English | [简体中文](https://github.com/Moraxyc/pi-nix-build/blob/main/docs/zh/README.md)
 
 A [pi](https://github.com/earendil-works/pi) extension for Nix builds and evaluation with live progress, failure diagnostics, and background job monitoring.
 
@@ -10,19 +10,19 @@ A [pi](https://github.com/earendil-works/pi) extension for Nix builds and evalua
 
 Displays evaluation progress, dependency tree, stdenv phases, remote builder hosts, duration estimates, active transfers, and `Ctrl+Shift+B` compact collapse above the editor.
 
-![Live progress widget](docs/assets/live-progress.webp)
+![Live progress widget](https://raw.githubusercontent.com/Moraxyc/pi-nix-build/main/docs/assets/live-progress.webp)
 
 ### Fullscreen Detail View (`Ctrl+Shift+M`)
 
 Inspects every derivation in the dependency forest alongside its build log, with auto-follow pause/resume (`↓ N newer lines`) and keyboard or mouse navigation.
 
-![Fullscreen detail view](docs/assets/detail-view.webp)
+![Fullscreen detail view](https://raw.githubusercontent.com/Moraxyc/pi-nix-build/main/docs/assets/detail-view.webp)
 
 ### Failure Diagnostics & Hash Mismatch
 
 Surfaces failed derivations, trailing log lines, dependency blocks (`⊘`), and fixed-output hash mismatches (`specified` vs `got`).
 
-![Failure diagnostics and hash mismatch](docs/assets/failure-diagnostics.webp)
+![Failure diagnostics and hash mismatch](https://raw.githubusercontent.com/Moraxyc/pi-nix-build/main/docs/assets/failure-diagnostics.webp)
 
 ## Features
 
@@ -92,12 +92,10 @@ After installation, ask pi to build or evaluate as usual:
 
 ## Documentation
 
-| Topic                        | English                                                    | 简体中文                                                   |
-| ---------------------------- | ---------------------------------------------------------- | ---------------------------------------------------------- |
-| Tools, Watches & Hooks       | [docs/en/tools.md](docs/en/tools.md)                       | [docs/zh/tools.md](docs/zh/tools.md)                       |
-| Live UI, Shortcuts & History | [docs/en/ui-and-shortcuts.md](docs/en/ui-and-shortcuts.md) | [docs/zh/ui-and-shortcuts.md](docs/zh/ui-and-shortcuts.md) |
-| Development & Architecture   | [docs/en/development.md](docs/en/development.md)           | [docs/zh/development.md](docs/zh/development.md)           |
+- [Tools, Watches & Hooks](https://github.com/Moraxyc/pi-nix-build/blob/main/docs/en/tools.md)
+- [Live UI, Shortcuts & History](https://github.com/Moraxyc/pi-nix-build/blob/main/docs/en/ui-and-shortcuts.md)
+- [Development & Architecture](https://github.com/Moraxyc/pi-nix-build/blob/main/docs/en/development.md)
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/Moraxyc/pi-nix-build/blob/main/LICENSE)
