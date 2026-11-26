@@ -100,6 +100,7 @@ export async function runNix(options: {
     });
     child.on("close", (code) => {
       detach();
+      state.dropSucceededLogs();
       log.end(() => resolve({ code, cancelled, stdout, plainStderr }));
     });
   });

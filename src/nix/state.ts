@@ -15,7 +15,8 @@ export const STDENV_PHASES = [
   "distPhase",
 ] as const;
 
-const LOG_TAIL_LINES = 200;
+/** Enough for the longest tail any report shows, that of a failed build. */
+const LOG_TAIL_LINES = 80;
 
 const TAB_WIDTH = 8;
 
@@ -53,7 +54,10 @@ export interface Build {
   finishedAt?: number;
   /** Nix's own error message when the build failed, e.g. why a builder could not start. */
   error?: string;
-  /** Last LOG_TAIL_LINES lines of builder output. */
+  /**
+   * Last LOG_TAIL_LINES lines of builder output, emptied for successful builds once the run ends;
+   * the run's log file keeps every line.
+   */
   log: string[];
 }
 
@@ -154,6 +158,16 @@ export class BuildState {
       case "msg":
         this.message(event.level, stripVTControlCharacters(event.msg), now);
         break;
+    }
+  }
+
+  /**
+   * Drops the log tails nothing reads any more. Only once the run ended: Nix stops a build's
+   * activity before it reports the build failed, sometimes not until the run ends.
+   */
+  dropSucceededLogs(): void {
+    for (const build of this.builds.values()) {
+      if (build.status !== "failed") build.log = [];
     }
   }
 

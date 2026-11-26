@@ -78,7 +78,7 @@ Two separate controls govern widget density:
 | `e`                    | Open the selected build's whole log read-only in `$VISUAL` / `$EDITOR` (`vi`). |
 | `Esc` / `q`            | Close the detail view.                                                         |
 
-The pane shows the last 200 lines of each build. `o` and `e` read the whole log from the run's log file, so they also work while the build runs, and write it to a read-only file next to that log.
+To stay light, memory holds only the last 80 lines of each build, and only for failed builds once the run ends. The pane reads a successful build's whole log from the run's log file when selected. `o` and `e` always read the whole log from that file, so they also work while the build runs, and write it to a read-only file next to that log.
 
 ### Mouse Controls (Fullscreen TUI Mode Only)
 

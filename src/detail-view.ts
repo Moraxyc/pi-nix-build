@@ -11,6 +11,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { formatPeer } from "./format.ts";
 import type { LiveRun } from "./live.ts";
+import type { Build } from "./nix/state.ts";
 import { finishedLine, statusLine, transferRow, treeRow } from "./render.ts";
 import { readBuildLog } from "./runner.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
@@ -56,6 +57,11 @@ export class DetailView implements Component {
   private logScroll = 0;
   /** Log length at the last render, to keep a scrolled view in place while lines arrive. */
   private logLength = 0;
+  /**
+   * Log of the selected successful build, read from the run's log file because the run dropped
+   * its tail; `lines` is unset while reading.
+   */
+  private stored: { drv: string; lines?: string[] } | undefined;
   /** A message for the footer, such as why the log could not be opened; cleared by any key. */
   private notice: string | undefined;
   private opening = false;
@@ -227,7 +233,12 @@ export class DetailView implements Component {
     const about = [theme.bold(build.name), theme.fg("muted", build.status)];
     if (build.phase) about.push(theme.fg("muted", build.phase));
     if (build.host) about.push(theme.fg("mdLink", formatPeer(build.host)));
-    const lines = build.log.length > 0 ? build.log : (build.error?.split("\n") ?? []);
+    const stored = build.log.length === 0 && build.status === "done";
+    const lines = stored
+      ? (this.storedLog(build) ?? [])
+      : build.log.length > 0
+        ? build.log
+        : (build.error?.split("\n") ?? []);
     if (this.logScroll > 0) this.logScroll += Math.max(0, lines.length - this.logLength);
     this.logLength = lines.length;
     const room = this.logPane.height - 1;
@@ -237,12 +248,40 @@ export class DetailView implements Component {
     const shown = lines.slice(Math.max(0, end - room), end);
     const position =
       this.logScroll > 0 ? theme.fg("warning", `  ↓ ${this.logScroll} newer lines`) : "";
-    const empty = lines.length === 0 ? [theme.fg("dim", " no output yet")] : [];
+    const empty =
+      lines.length > 0
+        ? []
+        : [
+            theme.fg(
+              "dim",
+              !stored ? " no output yet" : this.stored?.lines ? " no output" : " reading the log…",
+            ),
+          ];
     return [
       ` ${about.join("  ")}${position}`,
       ...empty,
       ...shown.map((line) => ` ${theme.fg("toolOutput", line)}`),
     ];
+  }
+
+  /** The whole log of `build` from the run's log file, read in the background on first use. */
+  private storedLog(build: Build): string[] | undefined {
+    if (this.stored?.drv === build.drv) return this.stored.lines;
+    const { drv } = build;
+    this.stored = { drv };
+    readBuildLog(this.run.details().logFile, drv)
+      .then(
+        (lines) => {
+          if (this.stored?.drv === drv) this.stored.lines = lines;
+        },
+        (error: unknown) => {
+          if (this.stored?.drv !== drv) return;
+          this.stored.lines = [];
+          this.notice = `could not read the log: ${error instanceof Error ? error.message : error}`;
+        },
+      )
+      .finally(() => this.tui.requestRender());
+    return undefined;
   }
 
   /** Shows the selected build's whole log, read from the run's log file, in a terminal program. */

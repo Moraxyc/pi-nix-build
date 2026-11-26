@@ -5,8 +5,6 @@ import { dependencyForest, type TreeNode } from "./tree.ts";
 
 /** Log lines kept per running build in partial results, for the expanded view. */
 const RUNNING_LOG_LINES = 10;
-/** Log lines kept per failed build. */
-export const FAILED_LOG_LINES = 80;
 
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 
@@ -113,8 +111,8 @@ export function snapshot(
     if (!finished && !inTree.has(build.drv)) continue;
     const keepLog = build.status === "failed" || (!finished && build.status === "running");
     const { log, error, ...rest } = build;
-    const lines = build.status === "failed" ? FAILED_LOG_LINES : RUNNING_LOG_LINES;
-    const view: BuildView = keepLog ? { ...rest, log: log.slice(-lines) } : rest;
+    const tail = build.status === "failed" ? log : log.slice(-RUNNING_LOG_LINES);
+    const view: BuildView = keepLog ? { ...rest, log: tail } : rest;
     if (build.status === "failed" && error) view.error = error;
     if (build.status === "running") view.estimateMs = estimate(build.name, build.host);
     builds.push(view);
