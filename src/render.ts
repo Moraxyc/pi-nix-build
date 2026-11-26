@@ -237,9 +237,16 @@ function buildRow(build: BuildView, now: number, theme: Theme): string {
   const parts = [`${theme.fg("accent", "▶")} ${theme.bold(build.name)}`];
   const current = phase(build, theme);
   if (current) parts.push(current);
-  if (build.startedAt) parts.push(theme.fg("syntaxNumber", formatDuration(now - build.startedAt)));
+  if (build.startedAt) parts.push(elapsed(now - build.startedAt, build.estimateMs, theme));
   if (build.host) parts.push(theme.fg("mdLink", formatPeer(build.host)));
   return parts.join("  ");
+}
+
+/** `1m02s`, or `1m02s / ~1m30s` with an estimate; overruns are highlighted. */
+function elapsed(ms: number, estimateMs: number | undefined, theme: Theme): string {
+  if (estimateMs === undefined) return theme.fg("syntaxNumber", formatDuration(ms));
+  const color = ms > estimateMs ? "warning" : "syntaxNumber";
+  return `${theme.fg(color, formatDuration(ms))}${theme.fg("dim", ` / ~${formatDuration(estimateMs)}`)}`;
 }
 
 function transferRow(transfer: TransferView, theme: Theme): string {

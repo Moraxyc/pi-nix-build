@@ -6,7 +6,9 @@ import {
 import { Text } from "@earendil-works/pi-tui";
 import { type BuildDetails, type RunStatus, snapshot, total } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
+import { DurationHistory, type Sample } from "../history.ts";
 import { DependencyGraph } from "../nix/graph.ts";
+import type { BuildState } from "../nix/state.ts";
 import { renderBuild } from "../render.ts";
 import { runNix } from "../runner.ts";
 import { buildCommand, buildParameters, displayCommand } from "./build-command.ts";
@@ -14,6 +16,17 @@ import { buildCommand, buildParameters, displayCommand } from "./build-command.t
 /** Partial results are throttled; the renderer needs one per second for timers. */
 const UPDATE_INTERVAL_MS = 200;
 const TIMER_INTERVAL_MS = 1_000;
+
+let history: Promise<DurationHistory> | undefined;
+
+function finishedBuilds(state: BuildState): Sample[] {
+  const samples: Sample[] = [];
+  for (const build of state.builds.values()) {
+    if (build.status !== "done" || !build.startedAt || !build.finishedAt) continue;
+    samples.push({ name: build.name, host: build.host, ms: build.finishedAt - build.startedAt });
+  }
+  return samples;
+}
 
 function progressText(details: BuildDetails): string {
   const { builds, downloads } = details.counts;
@@ -79,6 +92,8 @@ export function registerBuildTool(pi: ExtensionAPI): void {
 
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
       const command = buildCommand(params);
+      history ??= DurationHistory.load();
+      const durations = await history;
       const startedAt = Date.now();
       let dirty = true;
       const graph = new DependencyGraph(() => {
@@ -103,7 +118,10 @@ export function registerBuildTool(pi: ExtensionAPI): void {
             logFile: run.logFile,
             ...extra,
           },
-          (drv) => graph.inputsOf(drv),
+          {
+            inputsOf: (drv) => graph.inputsOf(drv),
+            estimate: (name, host) => durations.estimate(name, host),
+          },
         );
 
       let lastUpdate = 0;
@@ -119,6 +137,8 @@ export function registerBuildTool(pi: ExtensionAPI): void {
 
       try {
         const exit = await run.done;
+        // Estimates are a display aid; failing to save them must not fail the build.
+        await durations.record(finishedBuilds(run.state)).catch(() => {});
         const status: RunStatus = exit.cancelled
           ? "cancelled"
           : exit.code === 0

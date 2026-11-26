@@ -19,6 +19,8 @@ export interface BuildView {
   phaseStep?: number;
   startedAt?: number;
   finishedAt?: number;
+  /** Median of earlier runs with the same name and builder, for running builds. */
+  estimateMs?: number;
   log?: string[];
 }
 
@@ -75,7 +77,13 @@ export function snapshot(
   base: Pick<BuildDetails, "command" | "status" | "startedAt" | "finishedAt" | "logFile"> & {
     outputs?: string[];
   },
-  inputsOf: (drv: string) => readonly string[] | undefined = () => undefined,
+  {
+    inputsOf = () => undefined,
+    estimate = () => undefined,
+  }: {
+    inputsOf?: (drv: string) => readonly string[] | undefined;
+    estimate?: (name: string, host: string | undefined) => number | undefined;
+  } = {},
 ): BuildDetails {
   const finished = base.status !== "running";
   const active = (status: Status) => status === "running" || status === "failed";
@@ -105,7 +113,9 @@ export function snapshot(
     const keepLog = build.status === "failed" || (!finished && build.status === "running");
     const { log, ...rest } = build;
     const lines = build.status === "failed" ? FAILED_LOG_LINES : RUNNING_LOG_LINES;
-    builds.push(keepLog ? { ...rest, log: log.slice(-lines) } : rest);
+    const view: BuildView = keepLog ? { ...rest, log: log.slice(-lines) } : rest;
+    if (build.status === "running") view.estimateMs = estimate(build.name, build.host);
+    builds.push(view);
   }
   const transfers: TransferView[] = [];
   for (const transfer of state.transfers.values()) {
