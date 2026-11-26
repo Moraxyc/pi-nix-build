@@ -11,7 +11,8 @@ English | [简体中文](../zh/development.md)
 │   ├── flake.nix              # Dev-only inputs
 │   ├── flake-module.nix       # devShell, treefmt, and pre-commit configuration
 │   ├── checks.nix             # Flake check definitions
-│   └── check-upstream.ts      # Upstream Nix and nixpkgs consistency check
+│   ├── check-upstream.ts      # Upstream Nix and nixpkgs consistency check
+│   └── showcase/              # Renders the README animations in docs/assets
 └── src/
     ├── index.ts               # Extension entry point, shortcuts, shutdown cleanup
     ├── build-run.ts           # Build lifecycle, snapshot throttling, failure summary
@@ -73,6 +74,20 @@ Format Nix and TypeScript files via Nix:
 nix fmt
 ```
 
+## README Animations
+
+`dev/showcase/` renders `docs/assets/*.webp` from the current source. Run it from the repository root after `npm ci`:
+
+```bash
+# Re-render every animation into docs/assets
+nix run .#showcase
+
+# Render some scenes elsewhere and keep the intermediate SVG and PNG frames
+nix run .#showcase -- detail-view --out /tmp/showcase --keep
+```
+
+The scenes (`live-progress`, `detail-view`, `failure-diagnostics`) are in `dev/showcase/scenes.ts`. The script feeds synthetic `@nix` internal-json records to `BuildState`, puts pi's fullscreen screen together from the components pi exports on a `TuiAltScreen`, captures one frame per tick of a fixed clock, rasterizes the frames with `resvg`, and joins them into a lossless animation with `img2webp`. The clock, store hashes, and font are fixed, so two runs on the same source produce identical files.
+
 ## Flake Checks and Upstream Sync
 
 Run the full verification suite:
@@ -84,7 +99,7 @@ nix flake check
 Included checks:
 
 1. `package`: Builds `nix/package.nix` in the Nix sandbox.
-2. `typecheck`: Runs `tsc --noEmit` against `src/` and `dev/check-upstream.ts`.
+2. `typecheck`: Runs `tsc --noEmit` against `src/`, `dev/check-upstream.ts`, and `dev/showcase/`.
 3. `lint`: Runs `biome lint --vcs-enabled=false`.
 4. `upstream`: Runs `node dev/check-upstream.ts <nix> <nixpkgs>` against the pinned `nix` and `nixpkgs` inputs in `dev/flake.nix` to verify:
    - `ActivityType`, `ResultType`, and `Verbosity` in `src/nix/events.ts` match `nix/util/logging.hh` and `nix/util/error.hh`.

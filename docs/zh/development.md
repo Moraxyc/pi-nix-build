@@ -11,7 +11,8 @@
 │   ├── flake.nix              # 开发专用输入
 │   ├── flake-module.nix       # devShell、treefmt 与 pre-commit 配置
 │   ├── checks.nix             # Flake 检查项定义
-│   └── check-upstream.ts      # 上游 Nix 与 nixpkgs 一致性校验脚本
+│   ├── check-upstream.ts      # 上游 Nix 与 nixpkgs 一致性校验脚本
+│   └── showcase/              # 生成 docs/assets 中的 README 动画
 └── src/
     ├── index.ts               # 扩展入口、快捷键注册与退出清理
     ├── build-run.ts           # 构建生命周期、快照节流与失败摘要
@@ -73,6 +74,20 @@ npm run lint
 nix fmt
 ```
 
+## README 动画
+
+`docs/assets/*.webp` 由 `dev/showcase/` 用当前源码生成。在仓库根目录执行 `npm ci` 后运行：
+
+```bash
+# 重新生成全部动画并覆盖 docs/assets
+nix run .#showcase
+
+# 只生成部分场景，输出到其他目录，并保留中间帧（SVG/PNG）
+nix run .#showcase -- detail-view --out /tmp/showcase --keep
+```
+
+场景（`live-progress`、`detail-view`、`failure-diagnostics`）定义在 `dev/showcase/scenes.ts`。脚本把合成的 `@nix` internal-json 记录交给 `BuildState`，用 pi 导出的组件和 `TuiAltScreen` 拼出全屏界面，按固定时钟逐帧取屏幕内容，再经 `resvg` 栅格化、`img2webp` 合成无损动画。时钟、store 哈希和字体都是固定的，同一份源码两次运行的输出逐字节相同。
+
 ## Flake 检查与上游一致性校验
 
 运行完整检查套件：
@@ -84,7 +99,7 @@ nix flake check
 包含以下检查项：
 
 1. `package`：在 Nix 沙盒中构建 `nix/package.nix`。
-2. `typecheck`：对 `src/` 与 `dev/check-upstream.ts` 执行 `tsc --noEmit`。
+2. `typecheck`：对 `src/`、`dev/check-upstream.ts` 与 `dev/showcase/` 执行 `tsc --noEmit`。
 3. `lint`：执行 `biome lint --vcs-enabled=false`。
 4. `upstream`：对照 `dev/flake.nix` 中锁定的 `nix` 与 `nixpkgs` 源码运行 `node dev/check-upstream.ts <nix> <nixpkgs>`，校验：
    - `src/nix/events.ts` 中的 `ActivityType`、`ResultType`、`Verbosity` 与 `nix/util/logging.hh`、`nix/util/error.hh` 一致。

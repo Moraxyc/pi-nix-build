@@ -36,6 +36,30 @@
         };
       };
 
+      apps.showcase = {
+        type = "app";
+        meta.description = "Render the README animations in docs/assets from the current source";
+        program = lib.getExe (
+          pkgs.writeShellApplication {
+            name = "showcase";
+            runtimeInputs = with pkgs; [
+              nodejs
+              resvg
+              libwebp
+            ];
+            runtimeEnv.SHOWCASE_FONT_DIR = "${pkgs.nerd-fonts.jetbrains-mono}/share/fonts/truetype/NerdFonts/JetBrainsMono";
+            # Runs the working tree, with its node_modules, rather than a copy in the store.
+            text = ''
+              if [ ! -d node_modules ]; then
+                echo "run this from the repository root after npm ci" >&2
+                exit 1
+              fi
+              exec node dev/showcase/main.ts "$@"
+            '';
+          }
+        );
+      };
+
       devShells.default = pkgs.mkShell {
         packages = with pkgs; [
           nodejs

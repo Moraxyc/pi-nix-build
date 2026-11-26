@@ -19,6 +19,7 @@
               ../tsconfig.json
               ../src
               ./check-upstream.ts
+              ./showcase
             ];
           };
           nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.typescript ];
@@ -36,6 +37,7 @@
                   ../biome.json
                   ../src
                   ./check-upstream.ts
+                  ./showcase
                 ];
               };
             }
