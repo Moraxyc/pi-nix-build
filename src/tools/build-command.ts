@@ -1,5 +1,6 @@
 import { type Static, Type } from "typebox";
 import { singleLine } from "../format.ts";
+import { isLegacySource, legacySourceArgs, legacySourceParameters } from "./legacy-source.ts";
 
 export const buildParameters = Type.Object({
   installables: Type.Optional(
@@ -8,18 +9,7 @@ export const buildParameters = Type.Object({
         'Flake installables for `nix build`, e.g. ".#foo" or "nixpkgs#hello". Default ".". Not combined with file, expr or attrs.',
     }),
   ),
-  file: Type.Optional(
-    Type.String({
-      description:
-        "Non-flake: Nix file for `nix-build`. Defaults to ./default.nix when only attrs are given.",
-    }),
-  ),
-  expr: Type.Optional(
-    Type.String({ description: "Non-flake: Nix expression for `nix-build -E`." }),
-  ),
-  attrs: Type.Optional(
-    Type.Array(Type.String(), { description: "Non-flake: attribute paths for `nix-build -A`." }),
-  ),
+  ...legacySourceParameters("nix-build"),
   extraArgs: Type.Optional(
     Type.Array(Type.String(), {
       description:
@@ -44,29 +34,20 @@ export interface BuildCommand {
 
 /** Flake installables go to `nix build`; file, expr and attrs go to `nix-build`. */
 export function buildCommand(params: BuildParams): BuildCommand {
-  const legacy = params.file !== undefined || params.expr !== undefined || !!params.attrs?.length;
+  const legacy = isLegacySource(params);
   if (legacy && params.installables?.length) {
     throw new Error("Pass either installables (flakes) or file/expr/attrs (nix-build), not both.");
-  }
-  if (params.file !== undefined && params.expr !== undefined) {
-    throw new Error("Pass either file or expr, not both.");
   }
   const extra = params.extraArgs ?? [];
 
   if (legacy) {
-    const source =
-      params.expr !== undefined
-        ? ["-E", params.expr]
-        : params.file !== undefined
-          ? [params.file]
-          : [];
-    const attrs = (params.attrs ?? []).flatMap((attr) => ["-A", attr]);
+    const source = legacySourceArgs(params);
     const link = params.outLink ? ["--out-link", params.outLink] : ["--no-out-link"];
     return {
       program: "nix-build",
-      args: [...source, ...attrs, ...link, ...extra],
+      args: [...source, ...link, ...extra],
       title: "nix-build",
-      shownArgs: [...source, ...attrs, ...extra],
+      shownArgs: [...source, ...extra],
       parseOutputs: (stdout) => stdout.split("\n").filter((line) => line.startsWith("/")),
     };
   }
