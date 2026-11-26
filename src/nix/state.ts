@@ -34,6 +34,8 @@ export interface Build {
   phaseStep?: number;
   startedAt?: number;
   finishedAt?: number;
+  /** Nix's own error message when the build failed, e.g. why a builder could not start. */
+  error?: string;
   /** Last LOG_TAIL_LINES lines of builder output. */
   log: string[];
 }
@@ -253,8 +255,14 @@ export class BuildState {
   private error(msg: string, now: number): void {
     if (!this.errors.includes(msg)) this.errors.push(msg);
     const mismatch = HASH_MISMATCH.exec(msg);
-    if (mismatch && !this.hashMismatches.some((m) => m.drv === mismatch[1])) {
-      this.hashMismatches.push({ drv: mismatch[1], specified: mismatch[2], got: mismatch[3] });
+    if (mismatch) {
+      const build = this.build(mismatch[1]);
+      build.status = "failed";
+      build.finishedAt ??= now;
+      if (!this.hashMismatches.some((m) => m.drv === mismatch[1])) {
+        this.hashMismatches.push({ drv: mismatch[1], specified: mismatch[2], got: mismatch[3] });
+      }
+      return;
     }
     for (const pattern of FAILED_BUILD) {
       const drv = pattern.exec(msg)?.[1];
@@ -262,8 +270,15 @@ export class BuildState {
       const build = this.build(drv);
       build.status = DEPENDENCY_FAILED.test(msg) ? "blocked" : "failed";
       build.finishedAt ??= now;
+      if (build.status === "failed" && !this.hasMismatch(build)) build.error ??= msg;
       return;
     }
+  }
+
+  private hasMismatch(build: Build): boolean {
+    return this.hashMismatches.some(
+      (m) => (this.resolved.get(m.drv) ?? this.builds.get(m.drv)) === build,
+    );
   }
 
   private build(drv: string, listed = false): Build {

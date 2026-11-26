@@ -21,6 +21,7 @@ export interface BuildView {
   finishedAt?: number;
   /** Median of earlier runs with the same name and builder, for running builds. */
   estimateMs?: number;
+  error?: string;
   log?: string[];
 }
 
@@ -111,9 +112,10 @@ export function snapshot(
     counts.builds[build.status]++;
     if (!finished && !inTree.has(build.drv)) continue;
     const keepLog = build.status === "failed" || (!finished && build.status === "running");
-    const { log, ...rest } = build;
+    const { log, error, ...rest } = build;
     const lines = build.status === "failed" ? FAILED_LOG_LINES : RUNNING_LOG_LINES;
     const view: BuildView = keepLog ? { ...rest, log: log.slice(-lines) } : rest;
+    if (build.status === "failed" && error) view.error = error;
     if (build.status === "running") view.estimateMs = estimate(build.name, build.host);
     builds.push(view);
   }

@@ -61,6 +61,7 @@ function summarize(details: BuildDetails, plainStderr: string[]): string {
       `  got:       ${mismatch.got}`,
     );
   }
+  const mismatched = new Set(details.hashMismatches.map((m) => m.drv));
   const failed = details.builds.filter((build) => build.status === "failed");
   for (const build of failed) {
     const where = [
@@ -69,12 +70,15 @@ function summarize(details: BuildDetails, plainStderr: string[]): string {
     ];
     lines.push("", `Failed: ${build.drv} ${where.filter(Boolean).join(" ")}`);
     if (build.log?.length) lines.push(`Last ${build.log.length} log lines:`, ...build.log);
+    else if (build.error && !mismatched.has(build.drv)) lines.push(build.error);
   }
   if (failed.length === 0 && details.hashMismatches.length === 0) {
     lines.push("", ...(details.errors.length > 0 ? details.errors : plainStderr));
   }
   lines.push("", `Full log: ${details.logFile}`);
-  if (failed.length > 0) lines.push("Per-build logs: nix log <drv>");
+  if (failed.some((build) => (build.log?.length ?? 0) > 0)) {
+    lines.push("Per-build logs: nix log <drv>");
+  }
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
 }
 

@@ -173,8 +173,13 @@ function renderFinished(
     );
     lines.push(`    ${theme.fg("muted", "got      ")} ${theme.fg("toolDiffAdded", mismatch.got)}`);
   }
+  const mismatched = new Set(details.hashMismatches.map((m) => m.drv));
   for (const build of details.builds.filter((build) => build.status === "failed")) {
-    lines.push(`  ${failedRow(build, theme)}`, ...logTail(build, expanded, theme, "    "));
+    const tail = logTail(build, expanded, theme, "    ");
+    lines.push(`  ${failedRow(build, theme)}`, ...tail);
+    if (tail.length === 0 && build.error && !mismatched.has(build.drv)) {
+      lines.push(...build.error.split("\n").map((line) => `    ${theme.fg("toolOutput", line)}`));
+    }
   }
   if (details.status === "failed" && details.builds.every((build) => build.status !== "failed")) {
     // Evaluation errors and other failures not tied to a build.
