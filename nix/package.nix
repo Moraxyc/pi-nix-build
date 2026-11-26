@@ -14,6 +14,7 @@ buildNpmPackage (finalAttrs: {
       ../package.json
       ../package-lock.json
       ../README.md
+      ../LICENSE
       ../src
     ];
   };
@@ -25,5 +26,8 @@ buildNpmPackage (finalAttrs: {
 
   passthru.manifest = lib.importJSON ../package.json;
 
-  meta.description = "pi extension for Nix builds with live progress";
+  meta = {
+    description = "pi extension for Nix builds with live progress";
+    license = lib.licenses.mit;
+  };
 })
