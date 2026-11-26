@@ -1,5 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import { type ActivityId, ActivityType, type NixEvent, ResultType, Verbosity } from "./events.ts";
+import { STORE_PATH, storeName } from "./store.ts";
 
 /** Default stdenv phases in order, from definePhases in nixpkgs pkgs/stdenv/generic/setup.sh. */
 export const STDENV_PHASES = [
@@ -14,15 +15,7 @@ export const STDENV_PHASES = [
   "distPhase",
 ] as const;
 
-const STORE_HASH_LENGTH = 32;
 const LOG_TAIL_LINES = 200;
-
-/** `/nix/store/<hash>-hello-2.12.drv` → `hello-2.12` */
-export function storeName(path: string): string {
-  const base = path.slice(path.lastIndexOf("/") + 1);
-  const name = base.slice(STORE_HASH_LENGTH + 1);
-  return name.endsWith(".drv") ? name.slice(0, -".drv".length) : name;
-}
 
 export type Status = "planned" | "running" | "done" | "failed";
 
@@ -89,7 +82,7 @@ export const UPSTREAM_MESSAGES = [
 
 const PLANNED_BUILDS = /^(?:these \d+ derivations|this derivation) will be built:$/;
 const PLANNED_FETCHES = /^(?:these \d+ paths|this path) will be fetched\b/;
-const LISTED_PATH = /^\s+(\/nix\/store\/\S+)$/;
+const LISTED_PATH = new RegExp(`^\\s+(${STORE_PATH.source})$`);
 const EVALUATING_FILE = /^evaluating file '(.+)'$/;
 const FAILED_BUILD = [
   /Cannot build '([^']+\.drv)'/,
@@ -112,6 +105,11 @@ export class BuildState {
   /** A remote build opens one activity locally and forwards another from the builder. */
   private readonly openBuildActivities = new Map<string, number>();
   private listing: "builds" | "fetches" | undefined;
+  /**
+   * With content-addressed derivations Nix builds a resolved drv whose path differs from the
+   * listed one. An unlisted drv is matched to a still planned build of the same name.
+   */
+  private readonly resolved = new Map<string, Build>();
 
   apply(event: NixEvent, now: number): void {
     switch (event.action) {
@@ -134,13 +132,12 @@ export class BuildState {
     const [first, second, third] = event.fields;
     switch (event.type) {
       case ActivityType.Build: {
-        const drv = String(first);
-        const build = this.build(drv);
+        const build = this.build(String(first));
         build.status = "running";
         build.startedAt ??= now;
         if (second) build.host = String(second);
-        this.activities.set(event.id, { kind: "build", drv });
-        this.openBuildActivities.set(drv, (this.openBuildActivities.get(drv) ?? 0) + 1);
+        this.activities.set(event.id, { kind: "build", drv: build.drv });
+        this.openBuildActivities.set(build.drv, (this.openBuildActivities.get(build.drv) ?? 0) + 1);
         return;
       }
       case ActivityType.Substitute: {
@@ -246,7 +243,7 @@ export class BuildState {
       this.listing = undefined;
       return;
     }
-    if (this.listing === "builds") this.build(listed[1]);
+    if (this.listing === "builds") this.build(listed[1], true);
     else this.transfer(listed[1], "download");
   }
 
@@ -266,12 +263,19 @@ export class BuildState {
     }
   }
 
-  private build(drv: string): Build {
-    let build = this.builds.get(drv);
-    if (!build) {
-      build = { drv, name: storeName(drv), status: "planned", log: [] };
-      this.builds.set(drv, build);
+  private build(drv: string, listed = false): Build {
+    const known = this.builds.get(drv) ?? this.resolved.get(drv);
+    if (known) return known;
+    const name = storeName(drv);
+    if (!listed) {
+      for (const build of this.builds.values()) {
+        if (build.name !== name || build.status !== "planned") continue;
+        this.resolved.set(drv, build);
+        return build;
+      }
     }
+    const build: Build = { drv, name, status: "planned", log: [] };
+    this.builds.set(drv, build);
     return build;
   }
 
