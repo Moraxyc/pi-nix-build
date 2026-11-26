@@ -1,5 +1,6 @@
 import { type Static, Type } from "typebox";
 import { singleLine } from "../format.ts";
+import type { NixProgram } from "../runner.ts";
 import { isLegacySource, legacySourceArgs, legacySourceParameters } from "./legacy-source.ts";
 
 export const buildParameters = Type.Object({
@@ -24,9 +25,9 @@ export const buildParameters = Type.Object({
 export type BuildParams = Static<typeof buildParameters>;
 
 export interface BuildCommand {
-  program: "nix" | "nix-build";
+  program: NixProgram;
   args: string[];
-  title: "nix build" | "nix-build";
+  title: string;
   /** Arguments as the user would type them, without output and logging flags. */
   shownArgs: string[];
   parseOutputs(stdout: string): string[];

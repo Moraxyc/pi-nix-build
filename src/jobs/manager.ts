@@ -128,6 +128,7 @@ export class JobManager {
             details: run.live.details(),
             text: `${run.live.command} failed: ${error instanceof Error ? error.message : String(error)}`,
             isError: true,
+            stdout: "",
           }),
       ),
       stop: () => {

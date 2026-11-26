@@ -10,6 +10,8 @@ import { BuildState } from "./nix/state.ts";
 /** Nix stops builds and closes daemon connections on SIGINT; SIGKILL only if it hangs. */
 const KILL_GRACE_MS = 5_000;
 
+export type NixProgram = "nix" | "nix-build" | "nix-instantiate";
+
 export interface NixRun {
   /** Full argument list, including the logging flags added here. */
   args: string[];
@@ -29,7 +31,7 @@ export interface NixExit {
 }
 
 export async function runNix(options: {
-  program: "nix" | "nix-build";
+  program: NixProgram;
   args: string[];
   cwd: string;
   signal?: AbortSignal;

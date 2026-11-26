@@ -34,20 +34,24 @@ export interface FinishedBuild {
   /** Summary for the model: outputs, or failed builds with their logs. */
   text: string;
   isError: boolean;
+  /** What Nix printed on stdout, such as the value of an evaluation. */
+  stdout: string;
+}
+
+export interface RunOptions {
+  cwd: string;
+  signal?: AbortSignal;
+  detached?: boolean;
+  /** Called with each new snapshot while the build runs. */
+  onTick: (details: BuildDetails) => void;
+}
+
+export function startBuild(params: BuildParams, options: RunOptions): Promise<BuildRun> {
+  return startCommand(buildCommand(params), options);
 }
 
 /** Starts Nix and keeps a snapshot of its progress until it exits. */
-export async function startBuild(
-  params: BuildParams,
-  options: {
-    cwd: string;
-    signal?: AbortSignal;
-    detached?: boolean;
-    /** Called with each new snapshot while the build runs. */
-    onTick: (details: BuildDetails) => void;
-  },
-): Promise<BuildRun> {
-  const command = buildCommand(params);
+export async function startCommand(command: BuildCommand, options: RunOptions): Promise<BuildRun> {
   history ??= DurationHistory.load();
   const durations = await history;
   const startedAt = Date.now();
@@ -115,6 +119,7 @@ export async function startBuild(
         details: latest,
         text: summarize(latest, exit.plainStderr),
         isError: status !== "succeeded",
+        stdout: exit.stdout,
       };
     } finally {
       clearInterval(timer);
