@@ -69,6 +69,12 @@ export function displayCommand(command: BuildCommand): string {
   return singleLine([command.title, ...command.shownArgs].join(" "));
 }
 
+/** The command with an `-E` expression folded to `…`; the widget row cuts it anyway. */
+export function commandLabel(command: BuildCommand): string {
+  const args = command.shownArgs.map((arg, i, all) => (all[i - 1] === "-E" ? "…" : arg));
+  return singleLine([command.title, ...args].join(" "));
+}
+
 /** `nix build --json` prints `[{ drvPath, outputs: { out: path } }]`. */
 function parseBuildJson(stdout: string): string[] {
   try {

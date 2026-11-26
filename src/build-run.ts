@@ -10,6 +10,7 @@ import {
   type BuildCommand,
   type BuildParams,
   buildCommand,
+  commandLabel,
   displayCommand,
 } from "./tools/build-command.ts";
 
@@ -84,6 +85,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
   let latest = current("running");
   const live: LiveRun = {
     command: displayCommand(command),
+    label: commandLabel(command),
     state: run.state,
     details: () => latest,
     inputsOf: (drv) => graph.inputsOf(drv),

@@ -239,12 +239,13 @@ export class ProgressWidget {
         ) => {
           const row = lines.length;
           const lead = `${chevron} ${before}`;
+          // Dim: the tool row above already names the command in full.
+          const hovered = lit(row, "toggle");
           const shown = truncateToWidth(
-            theme.fg("toolTitle", theme.bold(command)),
+            theme.fg(hovered ? "text" : "dim", command),
             Math.max(1, width - visibleWidth(lead)),
           );
-          // Hovered: the chevron brightens and the command is underlined, like a link.
-          const hovered = lit(row, "toggle");
+          // Hovered: the chevron and command brighten and the command is underlined, like a link.
           const mark = hovered
             ? theme.fg("text", theme.bold(chevron))
             : theme.fg("accent", chevron);
@@ -257,11 +258,13 @@ export class ProgressWidget {
           const details = live.details();
           if (!this.isExpanded(id)) {
             const status = `${statusLine(details, now, theme)}  `;
-            lines.push(title(ICONS.folded, status, details.command, id, live));
+            lines.push(title(ICONS.folded, status, live.label, id, live));
             continue;
           }
-          const { status, rows } = renderProgress(details, { expanded, now }, theme);
-          lines.push(title(ICONS.expanded, "", details.command, id, live), status);
+          const rows = renderProgress(details, { expanded, now }, theme);
+          lines.push(title(ICONS.expanded, "", live.label, id, live));
+          const statusRow = lines.length;
+          lines.push("");
           // Rows a build's tree may take; a row whose log is cut still counts as shown.
           const budget =
             planned === undefined
@@ -276,6 +279,9 @@ export class ProgressWidget {
             shown++;
           }
           lines.push(...Array(budget - used).fill(""));
+          // Aligned with the tree; the running count only when the tree cannot show every build.
+          lines[statusRow] =
+            `  ${statusLine(details, now, theme, { running: shown < rows.length })}`;
           // The footer stays below the tree, cut or not, as the one way into the detail view.
           const row = lines.length;
           const left = shown < rows.length ? `  … ${rows.length - shown} more  ` : "  ";

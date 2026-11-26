@@ -57,8 +57,16 @@ export function renderBuild(
   return new Lines(lines);
 }
 
-/** Elapsed time with evaluation progress, or the build counts once builds are known. */
-export function statusLine(details: BuildDetails, now: number, theme: Theme): string {
+/**
+ * Elapsed time with evaluation progress, or the build counts once builds are known. Without
+ * `running`, the count of running builds is left to the tree rows that show them.
+ */
+export function statusLine(
+  details: BuildDetails,
+  now: number,
+  theme: Theme,
+  { running = true }: { running?: boolean } = {},
+): string {
   const { counts } = details;
   const elapsed = theme.fg("syntaxNumber", formatDuration(now - details.startedAt));
   if (total(counts.builds) === 0 && counts.downloads.running + counts.downloads.planned === 0) {
@@ -72,18 +80,18 @@ export function statusLine(details: BuildDetails, now: number, theme: Theme): st
     const fileCount = `${theme.fg("syntaxNumber", String(files))} files`;
     return `${elapsed}  ${theme.fg("accent", "evaluating")}  ${fileCount}${where}`;
   }
-  return `${elapsed}  ${header(details, theme)}`;
+  return `${elapsed}  ${header(details, theme, running)}`;
 }
 
 /**
- * Status line, then row groups: running fetches, the dependency tree, and transfers. A group is
- * one row with the log lines below it, so callers can cut between groups.
+ * Row groups: running fetches, the dependency tree, and transfers. A group is one row with the
+ * log lines below it, so callers can cut between groups.
  */
 export function renderProgress(
   details: BuildDetails,
   { expanded, now }: { expanded: boolean; now: number },
   theme: Theme,
-): { status: string; rows: string[][] } {
+): string[][] {
   const rows: string[][] = details.fetches.map((fetch) => [
     `  ${theme.fg("accent", ICONS.fetch)} ${theme.fg("muted", fetch)}`,
   ]);
@@ -122,7 +130,7 @@ export function renderProgress(
   };
   walk(tree, "  ", true);
   for (const transfer of details.transfers) rows.push([`  ${transferRow(transfer, theme)}`]);
-  return { status: statusLine(details, now, theme), rows };
+  return rows;
 }
 
 /** `○ a › b › c  (3 waiting)`, outermost first. */
@@ -217,7 +225,7 @@ function renderFinished(
   return lines;
 }
 
-function header(details: BuildDetails, theme: Theme): string {
+function header(details: BuildDetails, theme: Theme, running: boolean): string {
   const { builds, downloads, bytesDone, bytesExpected } = details.counts;
   const buildTotal = total(builds);
   const parts: string[] = [];
@@ -225,7 +233,8 @@ function header(details: BuildDetails, theme: Theme): string {
     const built = `${theme.fg("success", String(builds.done))}/${buildTotal} built`;
     parts.push(`${bar(builds, buildTotal, theme)} ${built}`);
   }
-  if (builds.running > 0) parts.push(theme.fg("accent", `${ICONS.running} ${builds.running}`));
+  if (running && builds.running > 0)
+    parts.push(theme.fg("accent", `${ICONS.running} ${builds.running}`));
   const downloadTotal = total(downloads);
   if (downloadTotal > 0) {
     const size = bytesExpected > 0 ? `${formatBytes(bytesDone)}/${formatBytes(bytesExpected)}` : "";
@@ -267,40 +276,58 @@ function phase(build: BuildView, theme: Theme): string | undefined {
   return `${name}${step}`;
 }
 
+/** `name  buildPhase 4/9 · 20s · host`: only the name and phase stand out. */
+function withMeta(lead: string, meta: (string | undefined)[], theme: Theme): string {
+  const shown = meta.filter((part) => part);
+  return shown.length > 0 ? `${lead}  ${shown.join(theme.fg("dim", " · "))}` : lead;
+}
+
+function host(build: BuildView, theme: Theme): string | undefined {
+  return build.host ? theme.fg("dim", formatPeer(build.host)) : undefined;
+}
+
 function buildRow(build: BuildView, now: number, theme: Theme): string {
-  const parts = [`${theme.fg("accent", ICONS.running)} ${theme.bold(build.name)}`];
-  const current = phase(build, theme);
-  if (current) parts.push(current);
-  if (build.startedAt) parts.push(elapsed(now - build.startedAt, build.estimateMs, theme));
-  if (build.host) parts.push(theme.fg("mdLink", formatPeer(build.host)));
-  return parts.join("  ");
+  return withMeta(
+    `${theme.fg("accent", ICONS.running)} ${theme.bold(build.name)}`,
+    [
+      phase(build, theme),
+      build.startedAt ? elapsed(now - build.startedAt, build.estimateMs, theme) : undefined,
+      host(build, theme),
+    ],
+    theme,
+  );
 }
 
 /** `1m02s`, or `1m02s / ~1m30s` with an estimate; overruns are highlighted. */
 function elapsed(ms: number, estimateMs: number | undefined, theme: Theme): string {
-  if (estimateMs === undefined) return theme.fg("syntaxNumber", formatDuration(ms));
-  const color = ms > estimateMs ? "warning" : "syntaxNumber";
+  if (estimateMs === undefined) return theme.fg("dim", formatDuration(ms));
+  const color = ms > estimateMs ? "warning" : "dim";
   return `${theme.fg(color, formatDuration(ms))}${theme.fg("dim", ` / ~${formatDuration(estimateMs)}`)}`;
 }
 
 export function transferRow(transfer: TransferView, theme: Theme): string {
   const { icon, color } = TRANSFERS[transfer.kind];
-  const parts = [`${theme.fg(color, icon)} ${transfer.name}`];
-  if (transfer.bytesExpected > 0) {
-    const size = `${formatBytes(transfer.bytesDone)}/${formatBytes(transfer.bytesExpected)}`;
-    parts.push(theme.fg("syntaxNumber", size));
-  }
-  if (transfer.peer) parts.push(theme.fg("mdLink", formatPeer(transfer.peer)));
-  return parts.join("  ");
+  const size =
+    transfer.bytesExpected > 0
+      ? `${formatBytes(transfer.bytesDone)}/${formatBytes(transfer.bytesExpected)}`
+      : undefined;
+  return withMeta(
+    `${theme.fg(color, icon)} ${transfer.name}`,
+    [size, transfer.peer ? formatPeer(transfer.peer) : undefined].map(
+      (part) => part && theme.fg("dim", part),
+    ),
+    theme,
+  );
 }
 
 function failedRow(build: BuildView, theme: Theme): string {
-  const parts = [`${theme.fg("error", ICONS.failed)} ${theme.bold(theme.fg("error", build.name))}`];
-  const where = phase(build, theme);
-  if (where) parts.push(where);
-  if (build.startedAt && build.finishedAt) {
-    parts.push(theme.fg("syntaxNumber", formatDuration(build.finishedAt - build.startedAt)));
-  }
-  if (build.host) parts.push(theme.fg("mdLink", formatPeer(build.host)));
-  return parts.join("  ");
+  const took =
+    build.startedAt && build.finishedAt
+      ? theme.fg("dim", formatDuration(build.finishedAt - build.startedAt))
+      : undefined;
+  return withMeta(
+    `${theme.fg("error", ICONS.failed)} ${theme.bold(theme.fg("error", build.name))}`,
+    [phase(build, theme), took, host(build, theme)],
+    theme,
+  );
 }
