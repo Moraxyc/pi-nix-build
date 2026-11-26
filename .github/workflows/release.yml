@@ -80,7 +80,8 @@ jobs:
       id-token: write
     env:
       VERSION: ${{ needs.build.outputs.version }}
-      TARBALL: dist/${{ needs.build.outputs.tarball }}
+      # The ./ prefix matters: npm reads `dist/x.tgz` as the GitHub repository dist/x.tgz.
+      TARBALL: ./dist/${{ needs.build.outputs.tarball }}
     steps:
       # Only for `--inputs-from .`, so npm comes from the pinned nixpkgs.
       - name: Checkout repository
