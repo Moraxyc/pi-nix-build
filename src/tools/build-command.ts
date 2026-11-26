@@ -19,6 +19,12 @@ export const buildParameters = Type.Object({
   outLink: Type.Optional(
     Type.String({ description: "Create this result symlink. By default no symlink is created." }),
   ),
+  dryRun: Type.Optional(
+    Type.Boolean({
+      description:
+        "Preview what Nix would build or fetch (`--dry-run`) without building: returns planned derivation count, top-level dependencies, paths to fetch, and rough historical duration estimate.",
+    }),
+  ),
 });
 
 export type BuildParams = Static<typeof buildParameters>;
@@ -30,15 +36,18 @@ export function buildCommand(params: BuildParams): BuildCommand {
     throw new Error("Pass either installables (flakes) or file/expr/attrs (nix-build), not both.");
   }
   const extra = params.extraArgs ?? [];
+  const dryRun = Boolean(params.dryRun || extra.includes("--dry-run"));
+  const dryArgs = params.dryRun && !extra.includes("--dry-run") ? ["--dry-run"] : [];
 
   if (legacy) {
     const source = legacySourceArgs(params);
     const link = params.outLink ? ["--out-link", params.outLink] : ["--no-out-link"];
     return {
       program: "nix-build",
-      args: [...source, ...link, ...extra],
+      args: [...source, ...link, ...dryArgs, ...extra],
       title: "nix-build",
-      shownArgs: [...source, ...extra],
+      shownArgs: [...source, ...dryArgs, ...extra],
+      dryRun,
       parseOutputs: (stdout) => stdout.split("\n").filter((line) => line.startsWith("/")),
     };
   }
@@ -47,9 +56,10 @@ export function buildCommand(params: BuildParams): BuildCommand {
   const link = params.outLink ? ["--out-link", params.outLink] : ["--no-link"];
   return {
     program: "nix",
-    args: ["build", ...installables, "--json", ...link, ...extra],
+    args: ["build", ...installables, "--json", ...link, ...dryArgs, ...extra],
     title: "nix build",
-    shownArgs: [...installables, ...extra],
+    shownArgs: [...installables, ...dryArgs, ...extra],
+    dryRun,
     parseOutputs: parseBuildJson,
   };
 }

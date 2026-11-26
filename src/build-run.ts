@@ -1,15 +1,25 @@
-import { DEFAULT_MAX_BYTES, truncateTail } from "@earendil-works/pi-coding-agent";
-import { type BuildDetails, type RunStatus, snapshot, total } from "./details.ts";
+import { DEFAULT_MAX_BYTES, truncateHead, truncateTail } from "@earendil-works/pi-coding-agent";
+import {
+  type BuildDetails,
+  type BuildView,
+  dryRunEstimate,
+  type RunStatus,
+  snapshot,
+  sumEstimates,
+  total,
+} from "./details.ts";
 import { formatDuration, formatPeer, singleLine } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { DependencyGraph } from "./nix/graph.ts";
 import type { BuildState } from "./nix/state.ts";
 import { buildLogPath, type NixProgram, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
+import { pruneForest } from "./tree.ts";
 
 /** Snapshots are throttled; timers on screen need one per second. */
 const UPDATE_INTERVAL_MS = 200;
 const TIMER_INTERVAL_MS = 1_000;
+const MAX_DRY_RUN_TREE_LINES = 60;
 
 let history: Promise<DurationHistory> | undefined;
 
@@ -19,6 +29,7 @@ export interface BuildCommand {
   title: string;
   /** Arguments as the user would type them, without output and logging flags. */
   shownArgs: string[];
+  dryRun?: boolean;
   parseOutputs(stdout: string): string[];
 }
 
@@ -88,7 +99,14 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
   ) =>
     snapshot(
       run.state,
-      { command: displayCommand(command), status, startedAt, logFile: run.logFile, ...extra },
+      {
+        command: displayCommand(command),
+        status,
+        dryRun: command.dryRun,
+        startedAt,
+        logFile: run.logFile,
+        ...extra,
+      },
       {
         inputsOf: (drv) => graph.inputsOf(drv),
         estimate: (name, host) => durations.estimate(name, host),
@@ -127,6 +145,9 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         : exit.code === 0
           ? "succeeded"
           : "failed";
+      if (command.dryRun && status === "succeeded" && run.state.builds.size > 0) {
+        await graph.load(run.state.builds.keys());
+      }
       const failedLogs =
         status === "failed"
           ? await saveFailedLogs(run.state, run.logFile).catch(() => undefined)
@@ -193,6 +214,9 @@ export async function saveFailedLogs(
 }
 
 export function summarize(details: BuildDetails, plainStderr: string[]): string {
+  if (details.dryRun && details.status === "succeeded") {
+    return summarizeDryRun(details);
+  }
   const { command } = details;
   const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
   const { builds, downloads } = details.counts;
@@ -235,4 +259,79 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
   }
   lines.push("", `Raw Nix log (internal-json): ${details.logFile}`);
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function summarizeDryRun(details: BuildDetails): string {
+  const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
+  const plannedBuilds = details.counts.builds.planned;
+  const plannedFetches = details.counts.downloads.planned;
+  const ifdBuilt = details.counts.builds.done;
+  const ifdFetched = details.counts.downloads.done;
+  const evalNote =
+    ifdBuilt > 0 || ifdFetched > 0
+      ? ` (during eval: ${ifdBuilt} built, ${ifdFetched} fetched)`
+      : "";
+  const counts = `${plural(plannedBuilds, "derivation")} to build, ${plural(plannedFetches, "path")} to fetch`;
+  if (plannedBuilds === 0 && plannedFetches === 0) {
+    const lines = [
+      `${details.command} evaluated in ${took}${evalNote}: ${counts} (already up to date).`,
+    ];
+    if (details.outputs.length > 0) lines.push("Outputs:", ...details.outputs);
+    return truncateHead(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
+  }
+
+  const lines = [`${details.command} evaluated in ${took}${evalNote}: ${counts}.`];
+  if (plannedBuilds > 0) {
+    const estimate = dryRunEstimate(details);
+    lines.push(
+      estimate.totalMs !== undefined
+        ? `Estimated build time: ~${formatDuration(estimate.totalMs)} (based on historical medians for ${estimate.known}/${estimate.planned} derivations).`
+        : `Estimated build time: unknown (no historical durations for ${plural(estimate.planned, "derivation")}).`,
+    );
+    const byDrv = new Map<string, BuildView>(details.builds.map((build) => [build.drv, build]));
+    const pruned = pruneForest(details.tree ?? [], MAX_DRY_RUN_TREE_LINES);
+    if (pruned.rows.length > 0) {
+      const shownLabel =
+        pruned.rows.length < estimate.planned || pruned.omittedRoots > 0
+          ? `, showing ${pruned.rows.length} of ${estimate.planned}`
+          : "";
+      lines.push(`Planned derivations (top-level first${shownLabel}):`);
+      for (const row of pruned.rows) {
+        const build = byDrv.get(row.drv);
+        const name = build?.name ?? row.drv;
+        const own =
+          build?.estimateMs !== undefined ? `~${formatDuration(build.estimateMs)}` : undefined;
+        let hidden: string | undefined;
+        if (row.hiddenDescendants > 0) {
+          const subEst = sumEstimates(row.hiddenDrvs, byDrv);
+          const estPart = subEst !== undefined ? `, ~${formatDuration(subEst)}` : "";
+          hidden = `+${plural(row.hiddenDescendants, "dep")}${estPart}`;
+        }
+        const meta = [own, hidden].filter(Boolean).join("; ");
+        lines.push(`${row.prefix}${name}${meta ? ` (${meta})` : ""}`);
+      }
+      if (pruned.omittedRoots > 0) {
+        lines.push(`… and ${plural(pruned.omittedRoots, "more top-level derivation")}`);
+      }
+    } else {
+      const planned = details.builds.filter((build) => build.status === "planned");
+      const shown = planned.slice(0, MAX_DRY_RUN_TREE_LINES);
+      lines.push("Planned derivations:");
+      for (const build of shown) {
+        const est = build.estimateMs !== undefined ? ` (~${formatDuration(build.estimateMs)})` : "";
+        lines.push(`${build.name}${est}`);
+      }
+      if (shown.length < planned.length) {
+        lines.push(`… and ${plural(planned.length - shown.length, "more derivation")}`);
+      }
+    }
+  }
+  if (details.outputs.length > 0) {
+    lines.push("Outputs:", ...details.outputs);
+  }
+  return truncateHead(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
 }

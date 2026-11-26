@@ -45,6 +45,7 @@ export interface BuildDetails {
   /** The command as the user would type it. */
   command: string;
   status: RunStatus;
+  dryRun?: boolean;
   startedAt: number;
   finishedAt?: number;
   evaluation: { files: number; current?: string };
@@ -73,9 +74,50 @@ export function total(counts: Record<Status, number>): number {
   return Object.values(counts).reduce((sum, n) => sum + n, 0);
 }
 
+export interface DryRunEstimate {
+  /** Sum of historical median durations for planned builds that have history, in ms. */
+  totalMs: number | undefined;
+  known: number;
+  planned: number;
+}
+
+export function dryRunEstimate(details: BuildDetails): DryRunEstimate {
+  let totalMs = 0;
+  let known = 0;
+  let planned = 0;
+  for (const build of details.builds) {
+    if (build.status !== "planned") continue;
+    planned++;
+    if (build.estimateMs !== undefined) {
+      totalMs += build.estimateMs;
+      known++;
+    }
+  }
+  return { totalMs: known > 0 ? totalMs : undefined, known, planned };
+}
+
+export function sumEstimates(
+  drvs: readonly string[],
+  builds: ReadonlyMap<string, BuildView>,
+): number | undefined {
+  let totalMs = 0;
+  let known = 0;
+  for (const drv of drvs) {
+    const est = builds.get(drv)?.estimateMs;
+    if (est !== undefined) {
+      totalMs += est;
+      known++;
+    }
+  }
+  return known > 0 ? totalMs : undefined;
+}
+
 export function snapshot(
   state: BuildState,
-  base: Pick<BuildDetails, "command" | "status" | "startedAt" | "finishedAt" | "logFile"> & {
+  base: Pick<
+    BuildDetails,
+    "command" | "status" | "startedAt" | "finishedAt" | "logFile" | "dryRun"
+  > & {
     outputs?: string[];
   },
   {
@@ -89,12 +131,16 @@ export function snapshot(
   } = {},
 ): BuildDetails {
   const finished = base.status !== "running";
+  const dryRunDone = finished && Boolean(base.dryRun) && base.status === "succeeded";
   const active = (status: Status) => status === "running" || status === "failed";
-  const tree = finished
-    ? undefined
-    : dependencyForest([...state.builds.keys()], inputsOf, (drv) =>
-        active(state.builds.get(drv)?.status ?? "planned"),
-      );
+  const tree =
+    finished && !dryRunDone
+      ? undefined
+      : dependencyForest([...state.builds.keys()], inputsOf, (drv) =>
+          dryRunDone
+            ? (state.builds.get(drv)?.status ?? "planned") === "planned"
+            : active(state.builds.get(drv)?.status ?? "planned"),
+        );
   const inTree = new Set<string>();
   const collect = (nodes: TreeNode[]) => {
     for (const node of nodes) {
@@ -120,7 +166,9 @@ export function snapshot(
     if (build.status === "failed" && error) view.error = error;
     const logFile = build.status === "failed" ? failedLogs?.get(build.drv) : undefined;
     if (logFile) view.logFile = logFile;
-    if (build.status === "running") view.estimateMs = estimate(build.name, build.host);
+    if (build.status === "running" || (dryRunDone && build.status === "planned")) {
+      view.estimateMs = estimate(build.name, build.host);
+    }
     builds.push(view);
   }
   const transfers: TransferView[] = [];
