@@ -7,6 +7,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { type BuildDetails, type RunStatus, snapshot, total } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
 import { DurationHistory, type Sample } from "../history.ts";
+import type { LiveRun } from "../live.ts";
 import { DependencyGraph } from "../nix/graph.ts";
 import type { BuildState } from "../nix/state.ts";
 import { renderBuild } from "../render.ts";
@@ -129,6 +130,15 @@ export function registerBuildTool(pi: ExtensionAPI, widget: ProgressWidget): voi
           },
         );
 
+      let latest = current("running");
+      const live: LiveRun = {
+        command: displayCommand(command),
+        state: run.state,
+        details: () => latest,
+        inputsOf: (drv) => graph.inputsOf(drv),
+        estimate: (name, host) => durations.estimate(name, host),
+      };
+
       let lastUpdate = 0;
       const timer = setInterval(() => {
         const now = Date.now();
@@ -136,9 +146,9 @@ export function registerBuildTool(pi: ExtensionAPI, widget: ProgressWidget): voi
         dirty = false;
         lastUpdate = now;
         graph.request(run.state.builds.keys());
-        const details = current("running");
-        if (ctx.hasUI) widget.update(ctx.ui, toolCallId, details);
-        onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
+        latest = current("running");
+        if (ctx.hasUI) widget.update(ctx.ui, toolCallId, live);
+        onUpdate?.({ content: [{ type: "text", text: progressText(latest) }], details: latest });
       }, UPDATE_INTERVAL_MS);
 
       try {
@@ -154,6 +164,7 @@ export function registerBuildTool(pi: ExtensionAPI, widget: ProgressWidget): voi
           finishedAt: Date.now(),
           outputs: command.parseOutputs(exit.stdout),
         });
+        latest = details;
         return {
           content: [{ type: "text", text: summarize(details, exit.plainStderr) }],
           details,

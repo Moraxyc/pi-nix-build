@@ -115,7 +115,7 @@ export function renderProgress(
   return lines;
 }
 
-function treeRow(build: BuildView, now: number, theme: Theme): string {
+export function treeRow(build: BuildView, now: number, theme: Theme): string {
   switch (build.status) {
     case "running":
       return buildRow(build, now, theme);
@@ -142,11 +142,8 @@ function logTail(build: BuildView, expanded: boolean, theme: Theme, indent: stri
   return tail.map((line) => `${indent}${theme.fg("error", "│")} ${theme.fg("toolOutput", line)}`);
 }
 
-function renderFinished(
-  details: BuildDetails,
-  { expanded }: { expanded: boolean },
-  theme: Theme,
-): string[] {
+/** `✓ 5 built, 2 fetched (3.1 MiB) in 1m02s` for a finished build. */
+export function finishedLine(details: BuildDetails, theme: Theme): string {
   const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
   const { builds, downloads, bytesDone } = details.counts;
   const bytes = bytesDone > 0 ? ` (${theme.fg("syntaxNumber", formatBytes(bytesDone))})` : "";
@@ -157,17 +154,22 @@ function renderFinished(
   if (builds.failed > 0) work.push(theme.fg("error", `${builds.failed} failed`));
   if (builds.blocked > 0) work.push(theme.fg("warning", `${builds.blocked} blocked`));
   const summary = `${work.join(", ")} in ${theme.fg("syntaxNumber", took)}`;
-  const lines: string[] = [];
   switch (details.status) {
     case "succeeded":
-      lines.push(`${theme.fg("success", "✓")} ${summary}`);
-      break;
+      return `${theme.fg("success", "✓")} ${summary}`;
     case "cancelled":
-      lines.push(`${theme.fg("warning", "⊘ cancelled")}  ${summary}`);
-      break;
+      return `${theme.fg("warning", "⊘ cancelled")}  ${summary}`;
     default:
-      lines.push(`${theme.fg("error", "✗ failed")}  ${summary}`);
+      return `${theme.fg("error", "✗ failed")}  ${summary}`;
   }
+}
+
+function renderFinished(
+  details: BuildDetails,
+  { expanded }: { expanded: boolean },
+  theme: Theme,
+): string[] {
+  const lines = [finishedLine(details, theme)];
 
   const outputs = expanded ? details.outputs : details.outputs.slice(0, COLLAPSED_OUTPUTS);
   for (const output of outputs) lines.push(`  ${theme.fg("mdLinkUrl", output)}`);
@@ -263,7 +265,7 @@ function elapsed(ms: number, estimateMs: number | undefined, theme: Theme): stri
   return `${theme.fg(color, formatDuration(ms))}${theme.fg("dim", ` / ~${formatDuration(estimateMs)}`)}`;
 }
 
-function transferRow(transfer: TransferView, theme: Theme): string {
+export function transferRow(transfer: TransferView, theme: Theme): string {
   const { icon, color } = TRANSFERS[transfer.kind];
   const parts = [`${theme.fg(color, icon)} ${transfer.name}`];
   if (transfer.bytesExpected > 0) {
