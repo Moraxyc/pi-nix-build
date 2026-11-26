@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,4 +105,22 @@ export async function runNix(options: {
   });
 
   return { args, state, logFile, pid: child.pid, done };
+}
+
+/**
+ * Every builder output line of one derivation, replayed from a run's log file. `Build.log` keeps
+ * only the tail; this reads the whole log on demand, also while the run is still writing it.
+ */
+export async function readBuildLog(logFile: string, drv: string): Promise<string[]> {
+  const state = new BuildState();
+  const lines: string[] = [];
+  state.onLog = (build, line) => {
+    if (build.drv === drv) lines.push(line);
+  };
+  const input = createReadStream(logFile, { encoding: "utf8" });
+  for await (const line of createInterface({ input, crlfDelay: Number.POSITIVE_INFINITY })) {
+    const event = parseLine(line);
+    if (event) state.apply(event, 0);
+  }
+  return lines;
 }

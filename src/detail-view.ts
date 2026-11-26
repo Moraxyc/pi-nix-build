@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { rm, writeFile } from "node:fs/promises";
+import { basename } from "node:path";
 import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
   type Component,
@@ -9,6 +12,7 @@ import {
 import { formatPeer } from "./format.ts";
 import type { LiveRun } from "./live.ts";
 import { finishedLine, statusLine, transferRow, treeRow } from "./render.ts";
+import { readBuildLog } from "./runner.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
 
 /** Narrower terminals stack the tree above the log. */
@@ -18,6 +22,8 @@ const TREE_PANE_MAX_WIDTH = 70;
 /** Title, status, rule, and footer. */
 const CHROME_ROWS = 4;
 const WHEEL_LINES = 3;
+
+type Viewer = "pager" | "editor";
 
 interface TreeLine {
   /** Unset for rows that cannot be selected, such as transfers. */
@@ -50,6 +56,9 @@ export class DetailView implements Component {
   private logScroll = 0;
   /** Log length at the last render, to keep a scrolled view in place while lines arrive. */
   private logLength = 0;
+  /** A message for the footer, such as why the log could not be opened; cleared by any key. */
+  private notice: string | undefined;
+  private opening = false;
   private treeScroll = 0;
   private rows: TreeLine[] = [];
   private treePane: Pane = { top: 0, left: 0, width: 0, height: 0 };
@@ -112,7 +121,7 @@ export class DetailView implements Component {
     }
     while (lines.length < height - 1) lines.push("");
     lines.length = height - 1;
-    lines.push(theme.fg("dim", this.footer()));
+    lines.push(this.notice ? theme.fg("warning", this.notice) : theme.fg("dim", this.footer()));
     return lines.map((line) => truncateToWidth(line, width));
   }
 
@@ -120,6 +129,11 @@ export class DetailView implements Component {
     const kb = this.keybindings;
     if (kb.matches(data, "tui.select.cancel") || data === "q") {
       this.close();
+      return;
+    }
+    this.notice = undefined;
+    if (data === "o" || data === "e") {
+      void this.openLog(data === "o" ? "pager" : "editor");
       return;
     }
     if (kb.matches(data, "tui.select.up") || data === "k") this.move(-1);
@@ -140,10 +154,7 @@ export class DetailView implements Component {
       else if (inTree) this.move(Math.sign(event.wheelDelta));
     } else if (event.type === "click" && event.button === "left" && inTree) {
       const drv = this.rows[this.treeScroll + event.y - this.treePane.top]?.drv;
-      if (drv && drv !== this.selected) {
-        this.selected = drv;
-        this.logScroll = 0;
-      }
+      if (drv) this.select(drv);
     }
     return { handled: true };
   }
@@ -151,7 +162,7 @@ export class DetailView implements Component {
   invalidate(): void {}
 
   private footer(): string {
-    const keys = "↑↓ select · PgUp/PgDn scroll log · g/G top/end · Esc close";
+    const keys = "↑↓ select · PgUp/PgDn scroll log · g/G top/end · o pager · e editor · Esc close";
     return this.tui.mode === "fullscreen" ? `${keys} · click to select · wheel to scroll` : keys;
   }
 
@@ -234,19 +245,66 @@ export class DetailView implements Component {
     ];
   }
 
+  /** Shows the selected build's whole log, read from the run's log file, in a terminal program. */
+  private async openLog(viewer: Viewer): Promise<void> {
+    const build = this.selected ? this.run.state.builds.get(this.selected) : undefined;
+    if (!build || this.opening) return;
+    this.opening = true;
+    const command =
+      viewer === "pager"
+        ? process.env.PAGER || "less"
+        : process.env.VISUAL || process.env.EDITOR || "vi";
+    try {
+      const { logFile } = this.run.details();
+      const lines = await readBuildLog(logFile, build.drv);
+      if (lines.length === 0 && build.error) lines.push(...build.error.split("\n"));
+      const file = `${logFile.replace(/\.log$/, "")}-${basename(build.drv, ".drv")}.log`;
+      // The mode applies only when the file is created. Read-only makes an editor warn before
+      // changing a copy that nothing reads back.
+      await rm(file, { force: true });
+      await writeFile(file, lines.map((line) => `${line}\n`).join(""), { mode: 0o444 });
+      this.tui.stop();
+      try {
+        this.notice = await runInTerminal(command, file);
+      } finally {
+        this.tui.start();
+      }
+    } catch (error) {
+      this.notice = `could not open the log: ${error instanceof Error ? error.message : error}`;
+    } finally {
+      this.opening = false;
+      this.tui.requestRender(true);
+    }
+  }
+
   private move(step: number): void {
     const selectable = this.rows.filter((row) => row.drv);
     const index = selectable.findIndex((row) => row.drv === this.selected);
     const next = selectable[Math.max(0, Math.min(selectable.length - 1, index + step))];
-    if (next?.drv && next.drv !== this.selected) {
-      this.selected = next.drv;
-      this.logScroll = 0;
-    }
+    if (next?.drv) this.select(next.drv);
+  }
+
+  private select(drv: string): void {
+    if (drv === this.selected) return;
+    this.selected = drv;
+    this.logScroll = 0;
   }
 
   private scrollLog(lines: number): void {
     this.logScroll = Math.max(0, this.logScroll + lines);
   }
+}
+
+/** Runs `command file` on the terminal; returns why it failed, if it did. */
+function runInTerminal(command: string, file: string): Promise<string | undefined> {
+  const [program = "", ...args] = command.split(" ").filter(Boolean);
+  return new Promise((resolve) => {
+    const child = spawn(program, [...args, file], { stdio: "inherit" });
+    child.on("error", () => resolve(`could not run ${command}`));
+    child.on("close", (code, signal) =>
+      resolve(code === 0 ? undefined : `${command} exited with ${code ?? signal}`),
+    );
+  });
 }
 
 function inside(pane: Pane, event: TuiMouseEvent): boolean {
