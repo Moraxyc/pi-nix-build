@@ -8,7 +8,7 @@
 
 ### 展示内容
 
-1. **顶部分割线**：所有构建上方显示一条 `── ❄ Nix ───` 分割线，便于一眼将组件与编辑器及其他组件区分开。设置 `PI_NIX_BUILD_NERD_FONT=1` 后改为显示 [Nerd Fonts](https://www.nerdfonts.com/) 中的 NixOS 图标；终端无法告知字体是否包含该字形，因此不会自动检测。
+1. **顶部分割线**：所有构建上方显示一条 `── ❄ Nix ───` 分割线，便于一眼将组件与编辑器及其他组件区分开。
 2. **标题行**：显示折叠/展开标识（`▾` / `▸`）与单行命令摘要（多行 `-E` 表达式将折叠为单行）。折叠的构建在命令前显示其状态行。
 3. **状态行**：
    - **求值阶段**：已用时间、`evaluating N files`，以及当前 `fetchTree` 操作（`⇣ ...`）或求值文件路径（省略 `/nix/store/<hash>-.../` 前缀）。
@@ -18,6 +18,24 @@
    - 串行等待链折叠为单行：`○ a › b › c  (3 waiting)`。
    - 运行中的推导依次显示名称、stdenv 阶段进度（`1/9`–`9/9`，对应 `unpackPhase` 至 `distPhase`）、已用时间与远程构建主机（如 `builder@host`）。存在历史耗时记录时，已用时间后附带 `/ ~<预估>`，超出预估后以警告色提示。
 5. **尾行**：展开的构建在依赖树下方显示 `⤢ details`，点击打开详情视图（非全屏 TUI 模式下显示 `⤢ ctrl+shift+m`）。依赖树被截断时，尾行显示为 `… N more  ⤢ details`。
+
+### 图标
+
+默认使用 [Nerd Fonts](https://www.nerdfonts.com/) 图标。设置 `PI_NIX_BUILD_NERD_FONT=0` 后改用普通 Unicode 符号；终端无法告知字体是否包含 Nerd Font 字形，因此不会自动检测。本文档中的符号均为普通形式。
+
+| 含义                     | Nerd Font 字形                                                | 普通符号        |
+| ------------------------ | ------------------------------------------------------------- | --------------- |
+| Nix（顶部分割线）        | `nf-linux-nixos`                                              | `❄`             |
+| 构建已折叠 / 已展开      | `nf-cod-chevron_right` / `nf-cod-chevron_down`                | `▸` / `▾`       |
+| 详情视图                 | `nf-oct-screen_full`                                          | `⤢`             |
+| 运行中                   | `nf-cod-play`                                                 | `▶`             |
+| 已完成                   | `nf-cod-check`                                                | `✓`             |
+| 失败                     | `nf-cod-close`                                                | `✗`             |
+| 因依赖失败而阻塞、已取消 | `nf-cod-circle_slash`                                         | `⊘`             |
+| 等待中                   | `nf-cod-circle`                                               | `○`             |
+| 下载 / 上传 / 复制       | `nf-cod-arrow_down` / `nf-cod-arrow_up` / `nf-cod-arrow_left` | `↓` / `↑` / `←` |
+| 获取源码（`fetchTree`）  | `nf-cod-cloud_download`                                       | `⇣`             |
+| 后台任务消息             | `nf-cod-server_process`                                       | `◆`             |
 
 ### 显示模式与行数上限
 

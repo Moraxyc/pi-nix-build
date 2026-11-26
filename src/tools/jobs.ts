@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { ICONS } from "../icons.ts";
 import {
   JOB_MESSAGE,
   type JobManager,
@@ -112,7 +113,7 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
     const body = content.split("\n").slice(1);
     const color = details?.isError ? "error" : "accent";
     const header = details
-      ? `${theme.fg(color, "◆")} ${theme.bold(details.job)} ${theme.fg("muted", details.event)}  ${theme.fg("dim", details.command)}`
+      ? `${theme.fg(color, ICONS.job)} ${theme.bold(details.job)} ${theme.fg("muted", details.event)}  ${theme.fg("dim", details.command)}`
       : content;
     if (!details) return new Text(header, 0, 0);
     const shown = expanded ? body : body.slice(0, 1);

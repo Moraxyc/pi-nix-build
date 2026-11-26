@@ -8,7 +8,7 @@ While one or more builds are running (foreground or background), `pi-nix-build` 
 
 ### Sections
 
-1. **Header rule**: One `── ❄ Nix ───` rule above all builds, so the widget is told apart from the editor and other widgets at a glance. Set `PI_NIX_BUILD_NERD_FONT=1` to show the NixOS logo from [Nerd Fonts](https://www.nerdfonts.com/) instead of `❄`; a terminal cannot report whether its font has the glyph, so this is not detected.
+1. **Header rule**: One `── ❄ Nix ───` rule above all builds, so the widget is told apart from the editor and other widgets at a glance.
 2. **Title row**: Displays a collapse/expand indicator (`▾` / `▸`) and a single-line command summary (multi-line `-E` expressions are flattened). A folded build shows its status line before the command on this row.
 3. **Status line**:
    - **Evaluation**: Elapsed time, `evaluating N files`, and either the active `fetchTree` operation (`⇣ ...`) or the current file path (without the `/nix/store/<hash>-.../` prefix).
@@ -18,6 +18,24 @@ While one or more builds are running (foreground or background), `pi-nix-build` 
    - Linear waiting chains collapse into one line: `○ a › b › c  (3 waiting)`.
    - Running derivations show name, stdenv phase progress (`1/9`–`9/9`, `unpackPhase` through `distPhase`), elapsed time, and remote builder host (e.g. `builder@host`). When duration history exists, elapsed time includes `/ ~<estimate>` and switches to warning color if exceeded.
 5. **Footer**: Below the tree of an expanded build, `⤢ details` opens the detail view (`⤢ ctrl+shift+m` outside fullscreen TUI mode). When the tree is cut, the footer reads `… N more  ⤢ details`.
+
+### Icons
+
+Icons come from [Nerd Fonts](https://www.nerdfonts.com/) by default. Set `PI_NIX_BUILD_NERD_FONT=0` for plain Unicode symbols; a terminal cannot report whether its font has Nerd Font glyphs, so this is not detected. This document shows the plain forms.
+
+| Meaning                                   | Nerd Font glyph                                               | Plain           |
+| ----------------------------------------- | ------------------------------------------------------------- | --------------- |
+| Nix (header rule)                         | `nf-linux-nixos`                                              | `❄`             |
+| Folded / expanded build                   | `nf-cod-chevron_right` / `nf-cod-chevron_down`                | `▸` / `▾`       |
+| Detail view                               | `nf-oct-screen_full`                                          | `⤢`             |
+| Running                                   | `nf-cod-play`                                                 | `▶`             |
+| Done                                      | `nf-cod-check`                                                | `✓`             |
+| Failed                                    | `nf-cod-close`                                                | `✗`             |
+| Blocked by a failed dependency, cancelled | `nf-cod-circle_slash`                                         | `⊘`             |
+| Waiting                                   | `nf-cod-circle`                                               | `○`             |
+| Download / upload / copy                  | `nf-cod-arrow_down` / `nf-cod-arrow_up` / `nf-cod-arrow_left` | `↓` / `↑` / `←` |
+| Fetching a source (`fetchTree`)           | `nf-cod-cloud_download`                                       | `⇣`             |
+| Background job message                    | `nf-cod-server_process`                                       | `◆`             |
 
 ### Display Modes and Row Limits
 

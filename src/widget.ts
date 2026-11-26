@@ -8,6 +8,7 @@ import {
 } from "@earendil-works/pi-tui";
 import { DetailView } from "./detail-view.ts";
 import { type BuildDetails, total } from "./details.ts";
+import { ICONS } from "./icons.ts";
 import type { LiveRun } from "./live.ts";
 import { aroundPointerMoves } from "./pointer.ts";
 import { renderProgress, statusLine } from "./render.ts";
@@ -17,11 +18,7 @@ export const TOGGLE_KEY = "ctrl+shift+b";
 export const DETAILS_KEY = "ctrl+shift+m";
 /** Upper bounds for the tree rows between a build's status line and its footer. */
 const MAX_BODY_ROWS = { collapsed: 10, expanded: 30 };
-const DETAILS_BUTTON_ICON = "⤢";
-const DETAILS_BUTTON = `${DETAILS_BUTTON_ICON} details`;
-/** Set to 1 for the NixOS logo from Nerd Fonts; a terminal cannot tell whether its font has it. */
-const NERD_FONT_ENV = "PI_NIX_BUILD_NERD_FONT";
-const NIX_ICON = process.env[NERD_FONT_ENV] === "1" ? "\uf313" : "❄";
+const DETAILS_BUTTON = `${ICONS.details} details`;
 /** Rule cells before the label, as in `── ❄ Nix ───`. */
 const RULE_LEAD = 2;
 
@@ -228,7 +225,7 @@ export class ProgressWidget {
         ) => {
           if (clickable) this.hints.push({ row, start, end, action, id, live });
         };
-        const button = clickable ? DETAILS_BUTTON : `${DETAILS_BUTTON_ICON} ${DETAILS_KEY}`;
+        const button = clickable ? DETAILS_BUTTON : `${ICONS.details} ${DETAILS_KEY}`;
         const buttonText = (row: number) =>
           lit(row, "details") ? theme.fg("text", theme.bold(button)) : theme.fg("dim", button);
 
@@ -260,11 +257,11 @@ export class ProgressWidget {
           const details = live.details();
           if (!this.isExpanded(id)) {
             const status = `${statusLine(details, now, theme)}  `;
-            lines.push(title("▸", status, details.command, id, live));
+            lines.push(title(ICONS.folded, status, details.command, id, live));
             continue;
           }
           const { status, rows } = renderProgress(details, { expanded, now }, theme);
-          lines.push(title("▾", "", details.command, id, live), status);
+          lines.push(title(ICONS.expanded, "", details.command, id, live), status);
           // Rows a build's tree may take; a row whose log is cut still counts as shown.
           const budget =
             planned === undefined
@@ -295,7 +292,7 @@ export class ProgressWidget {
 }
 
 function headerRule(width: number, theme: Theme): string {
-  const label = ` ${theme.fg("accent", NIX_ICON)} ${theme.bold("Nix")} `;
+  const label = ` ${theme.fg("accent", ICONS.nix)} ${theme.bold("Nix")} `;
   const rest = Math.max(0, width - RULE_LEAD - visibleWidth(label));
   const rule = (cells: number) => theme.fg("border", "─".repeat(cells));
   return `${rule(RULE_LEAD)}${label}${rule(rest)}`;

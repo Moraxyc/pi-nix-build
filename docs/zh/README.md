@@ -39,6 +39,7 @@
 - [pi](https://github.com/earendil-works/pi)
 - Node.js `>= 22.19.0`
 - `PATH` 中可用的 `nix` / `nix-build` / `nix-instantiate`
+- 终端使用 [Nerd Font](https://www.nerdfonts.com/) 以显示图标；否则设置 `PI_NIX_BUILD_NERD_FONT=0` 改用普通 Unicode 符号
 
 ## 安装
 

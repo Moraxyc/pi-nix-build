@@ -9,6 +9,7 @@ import { Text } from "@earendil-works/pi-tui";
 import { type FinishedBuild, progressText, startCommand } from "../build-run.ts";
 import { type BuildDetails, total } from "../details.ts";
 import { formatDuration, singleLine } from "../format.ts";
+import { ICONS } from "../icons.ts";
 import { finishedLine, Lines, renderBuild } from "../render.ts";
 import type { ProgressWidget } from "../widget.ts";
 import { evalCommand, evalParameters } from "./eval-command.ts";
@@ -84,7 +85,7 @@ export function registerEvalTool(pi: ExtensionAPI, widget: ProgressWidget): void
       const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
       const status = hasWork(details)
         ? finishedLine(details, theme)
-        : `${theme.fg("success", "✓")} evaluated in ${theme.fg("syntaxNumber", took)}`;
+        : `${theme.fg("success", ICONS.done)} evaluated in ${theme.fg("syntaxNumber", took)}`;
       const value = text.split("\n").map((line) => theme.fg("toolOutput", line));
       // Expanded wraps, so a one-line JSON value can be read in full.
       if (expanded) return new Text([status, ...value].join("\n"), 0, 0);

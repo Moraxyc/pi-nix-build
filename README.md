@@ -39,6 +39,7 @@ Surfaces failed derivations, trailing log lines, dependency blocks (`⊘`), and 
 - [pi](https://github.com/earendil-works/pi)
 - Node.js `>= 22.19.0`
 - `nix` / `nix-build` / `nix-instantiate` on `PATH`
+- A [Nerd Font](https://www.nerdfonts.com/) in the terminal for the icons, or `PI_NIX_BUILD_NERD_FONT=0` for plain Unicode symbols
 
 ## Installation
 

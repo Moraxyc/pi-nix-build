@@ -2,6 +2,7 @@ import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
 import { type Component, truncateToWidth } from "@earendil-works/pi-tui";
 import { type BuildDetails, type BuildView, type TransferView, total } from "./details.ts";
 import { formatBytes, formatDuration, formatPeer } from "./format.ts";
+import { ICONS } from "./icons.ts";
 import { STDENV_PHASES } from "./nix/state.ts";
 import { pathInStore } from "./nix/store.ts";
 import type { TreeNode } from "./tree.ts";
@@ -26,9 +27,9 @@ const PHASE_COLORS: Record<string, ThemeColor> = {
 };
 
 const TRANSFERS = {
-  download: { icon: "↓", color: "accent" },
-  upload: { icon: "↑", color: "warning" },
-  copy: { icon: "←", color: "syntaxType" },
+  download: { icon: ICONS.download, color: "accent" },
+  upload: { icon: ICONS.upload, color: "warning" },
+  copy: { icon: ICONS.copy, color: "syntaxType" },
 } as const satisfies Record<string, { icon: string; color: ThemeColor }>;
 
 /** Lines cut to the viewport instead of wrapped, so log lines stay one row each. */
@@ -64,7 +65,7 @@ export function statusLine(details: BuildDetails, now: number, theme: Theme): st
     const { files, current } = details.evaluation;
     const [fetch] = details.fetches;
     const where = fetch
-      ? `  ${theme.fg("accent", "⇣")} ${theme.fg("muted", fetch)}`
+      ? `  ${theme.fg("accent", ICONS.fetch)} ${theme.fg("muted", fetch)}`
       : current
         ? `  ${theme.fg("dim", pathInStore(current))}`
         : "";
@@ -84,7 +85,7 @@ export function renderProgress(
   theme: Theme,
 ): { status: string; rows: string[][] } {
   const rows: string[][] = details.fetches.map((fetch) => [
-    `  ${theme.fg("accent", "⇣")} ${theme.fg("muted", fetch)}`,
+    `  ${theme.fg("accent", ICONS.fetch)} ${theme.fg("muted", fetch)}`,
   ]);
   const builds = new Map(details.builds.map((build) => [build.drv, build]));
   // Builds not in the tree, e.g. from results stored before the tree existed, become roots.
@@ -127,7 +128,7 @@ export function renderProgress(
 /** `○ a › b › c  (3 waiting)`, outermost first. */
 function waitingChainRow(names: string[], theme: Theme): string {
   const path = names.map((name) => theme.fg("muted", name)).join(theme.fg("dim", " › "));
-  return `${theme.fg("dim", "○")} ${path}  ${theme.fg("dim", `(${names.length} waiting)`)}`;
+  return `${theme.fg("dim", ICONS.waiting)} ${path}  ${theme.fg("dim", `(${names.length} waiting)`)}`;
 }
 
 export function treeRow(build: BuildView, now: number, theme: Theme): string {
@@ -137,11 +138,11 @@ export function treeRow(build: BuildView, now: number, theme: Theme): string {
     case "failed":
       return failedRow(build, theme);
     case "planned":
-      return `${theme.fg("dim", "○")} ${theme.fg("muted", build.name)}  ${theme.fg("dim", "waiting")}`;
+      return `${theme.fg("dim", ICONS.waiting)} ${theme.fg("muted", build.name)}  ${theme.fg("dim", "waiting")}`;
     case "blocked":
-      return `${theme.fg("warning", "⊘")} ${theme.fg("muted", build.name)}  ${theme.fg("warning", "dependency failed")}`;
+      return `${theme.fg("warning", ICONS.blocked)} ${theme.fg("muted", build.name)}  ${theme.fg("warning", "dependency failed")}`;
     case "done":
-      return `${theme.fg("success", "✓")} ${build.name}`;
+      return `${theme.fg("success", ICONS.done)} ${build.name}`;
   }
 }
 
@@ -171,11 +172,11 @@ export function finishedLine(details: BuildDetails, theme: Theme): string {
   const summary = `${work.join(", ")} in ${theme.fg("syntaxNumber", took)}`;
   switch (details.status) {
     case "succeeded":
-      return `${theme.fg("success", "✓")} ${summary}`;
+      return `${theme.fg("success", ICONS.done)} ${summary}`;
     case "cancelled":
-      return `${theme.fg("warning", "⊘ cancelled")}  ${summary}`;
+      return `${theme.fg("warning", `${ICONS.blocked} cancelled`)}  ${summary}`;
     default:
-      return `${theme.fg("error", "✗ failed")}  ${summary}`;
+      return `${theme.fg("error", `${ICONS.failed} failed`)}  ${summary}`;
   }
 }
 
@@ -224,14 +225,16 @@ function header(details: BuildDetails, theme: Theme): string {
     const built = `${theme.fg("success", String(builds.done))}/${buildTotal} built`;
     parts.push(`${bar(builds, buildTotal, theme)} ${built}`);
   }
-  if (builds.running > 0) parts.push(theme.fg("accent", `▶ ${builds.running}`));
+  if (builds.running > 0) parts.push(theme.fg("accent", `${ICONS.running} ${builds.running}`));
   const downloadTotal = total(downloads);
   if (downloadTotal > 0) {
     const size = bytesExpected > 0 ? `${formatBytes(bytesDone)}/${formatBytes(bytesExpected)}` : "";
     const sizeText = size ? ` ${theme.fg("syntaxNumber", size)}` : "";
-    parts.push(`${theme.fg("accent", "↓")} ${downloads.done}/${downloadTotal}${sizeText}`);
+    parts.push(
+      `${theme.fg("accent", ICONS.download)} ${downloads.done}/${downloadTotal}${sizeText}`,
+    );
   }
-  if (builds.failed > 0) parts.push(theme.fg("error", `✗ ${builds.failed}`));
+  if (builds.failed > 0) parts.push(theme.fg("error", `${ICONS.failed} ${builds.failed}`));
   return parts.join("  ");
 }
 
@@ -265,7 +268,7 @@ function phase(build: BuildView, theme: Theme): string | undefined {
 }
 
 function buildRow(build: BuildView, now: number, theme: Theme): string {
-  const parts = [`${theme.fg("accent", "▶")} ${theme.bold(build.name)}`];
+  const parts = [`${theme.fg("accent", ICONS.running)} ${theme.bold(build.name)}`];
   const current = phase(build, theme);
   if (current) parts.push(current);
   if (build.startedAt) parts.push(elapsed(now - build.startedAt, build.estimateMs, theme));
@@ -292,7 +295,7 @@ export function transferRow(transfer: TransferView, theme: Theme): string {
 }
 
 function failedRow(build: BuildView, theme: Theme): string {
-  const parts = [`${theme.fg("error", "✗")} ${theme.bold(theme.fg("error", build.name))}`];
+  const parts = [`${theme.fg("error", ICONS.failed)} ${theme.bold(theme.fg("error", build.name))}`];
   const where = phase(build, theme);
   if (where) parts.push(where);
   if (build.startedAt && build.finishedAt) {
