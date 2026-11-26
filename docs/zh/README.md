@@ -4,6 +4,26 @@
 
 面向 [pi](https://github.com/earendil-works/pi) 的 Nix 构建扩展，提供实时进度展示、失败诊断与后台任务监控。
 
+## 效果展示
+
+### 实时进度组件
+
+在编辑器上方实时展示求值进度、依赖树、stdenv 构建阶段、远程构建主机、耗时预估、传输进度，以及 `Ctrl+Shift+B` 折叠视图。
+
+![实时进度组件](../assets/live-progress.webp)
+
+### 全屏详情视图（`Ctrl+Shift+M`）
+
+左侧查看完整推导依赖树，右侧浏览对应构建日志，支持滚动暂停自动跟随（`↓ N newer lines`）与键盘/鼠标交互。
+
+![全屏详情视图](../assets/detail-view.webp)
+
+### 失败诊断与 Hash 不匹配
+
+直接呈现失败推导、末尾日志、受阻下游（`⊘`）以及 Fixed-Output Hash 不匹配详情（`specified` 与 `got` 对比）。
+
+![失败诊断与 Hash 不匹配](../assets/failure-diagnostics.webp)
+
 ## 功能特性
 
 - **实时构建进度**：在编辑器上方展示求值进度、依赖树、构建阶段、远程构建主机及耗时预估。

@@ -4,6 +4,26 @@ English | [简体中文](docs/zh/README.md)
 
 A [pi](https://github.com/earendil-works/pi) extension for Nix builds with live progress, failure diagnostics, and background job monitoring.
 
+## Showcase
+
+### Live Progress Widget
+
+Displays evaluation progress, dependency tree, stdenv phases, remote builder hosts, duration estimates, active transfers, and `Ctrl+Shift+B` compact collapse above the editor.
+
+![Live progress widget](docs/assets/live-progress.webp)
+
+### Fullscreen Detail View (`Ctrl+Shift+M`)
+
+Inspects every derivation in the dependency forest alongside its build log, with auto-follow pause/resume (`↓ N newer lines`) and keyboard or mouse navigation.
+
+![Fullscreen detail view](docs/assets/detail-view.webp)
+
+### Failure Diagnostics & Hash Mismatch
+
+Surfaces failed derivations, trailing log lines, dependency blocks (`⊘`), and fixed-output hash mismatches (`specified` vs `got`).
+
+![Failure diagnostics and hash mismatch](docs/assets/failure-diagnostics.webp)
+
 ## Features
 
 - **Live build progress**: Displays evaluation status, dependency trees, build phases, remote builders, and estimated build times above the editor.
