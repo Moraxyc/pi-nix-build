@@ -1,6 +1,6 @@
 {
   "name": "pi-nix-build",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "pi extension for Nix builds with live progress",
   "license": "MIT",
   "repository": {
