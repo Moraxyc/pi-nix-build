@@ -17,7 +17,8 @@ export const STDENV_PHASES = [
 
 const LOG_TAIL_LINES = 200;
 
-export type Status = "planned" | "running" | "done" | "failed";
+/** `blocked`: not built because a dependency failed. */
+export type Status = "planned" | "running" | "done" | "failed" | "blocked";
 
 export interface Build {
   drv: string;
@@ -78,6 +79,7 @@ export const UPSTREAM_MESSAGES = [
   "build of '",
   "builder for '",
   "hash mismatch in fixed-output derivation '",
+  "%d %s failed",
 ];
 
 const PLANNED_BUILDS = /^(?:these \d+ derivations|this derivation) will be built:$/;
@@ -89,6 +91,7 @@ const FAILED_BUILD = [
   /build of '([^']+\.drv)'.* failed/,
   /builder for '([^']+\.drv)' failed/,
 ];
+const DEPENDENCY_FAILED = /Reason: \d+ dependenc(?:y|ies) failed/;
 const HASH_MISMATCH =
   /hash mismatch in fixed-output derivation '([^']+)':\s*specified:\s*(\S+)\s*got:\s*(\S+)/;
 
@@ -257,7 +260,7 @@ export class BuildState {
       const drv = pattern.exec(msg)?.[1];
       if (!drv) continue;
       const build = this.build(drv);
-      build.status = "failed";
+      build.status = DEPENDENCY_FAILED.test(msg) ? "blocked" : "failed";
       build.finishedAt ??= now;
       return;
     }

@@ -1,4 +1,5 @@
 import type { BuildState, HashMismatch, Status, TransferKind } from "./nix/state.ts";
+import { dependencyForest, type TreeNode } from "./tree.ts";
 
 // Tool result details: plain JSON, persisted in the session and read by the renderer.
 
@@ -46,8 +47,13 @@ export interface BuildDetails {
   evaluation: { files: number; current?: string };
   fetches: string[];
   counts: Counts;
-  /** Running and failed builds while running; every build once finished. */
+  /**
+   * While running: running and failed builds, plus the builds waiting on them.
+   * Once finished: every build.
+   */
   builds: BuildView[];
+  /** While running: `builds` arranged by dependency. */
+  tree?: TreeNode[];
   /** Running transfers only. */
   transfers: TransferView[];
   outputs: string[];
@@ -57,7 +63,11 @@ export interface BuildDetails {
 }
 
 function emptyCounts(): Record<Status, number> {
-  return { planned: 0, running: 0, done: 0, failed: 0 };
+  return { planned: 0, running: 0, done: 0, failed: 0, blocked: 0 };
+}
+
+export function total(counts: Record<Status, number>): number {
+  return Object.values(counts).reduce((sum, n) => sum + n, 0);
 }
 
 export function snapshot(
@@ -65,8 +75,23 @@ export function snapshot(
   base: Pick<BuildDetails, "command" | "status" | "startedAt" | "finishedAt" | "logFile"> & {
     outputs?: string[];
   },
+  inputsOf: (drv: string) => readonly string[] | undefined = () => undefined,
 ): BuildDetails {
   const finished = base.status !== "running";
+  const active = (status: Status) => status === "running" || status === "failed";
+  const tree = finished
+    ? undefined
+    : dependencyForest([...state.builds.keys()], inputsOf, (drv) =>
+        active(state.builds.get(drv)?.status ?? "planned"),
+      );
+  const inTree = new Set<string>();
+  const collect = (nodes: TreeNode[]) => {
+    for (const node of nodes) {
+      inTree.add(node.drv);
+      collect(node.children);
+    }
+  };
+  collect(tree ?? []);
   const counts: Counts = {
     builds: emptyCounts(),
     downloads: emptyCounts(),
@@ -76,8 +101,8 @@ export function snapshot(
   const builds: BuildView[] = [];
   for (const build of state.builds.values()) {
     counts.builds[build.status]++;
+    if (!finished && !inTree.has(build.drv)) continue;
     const keepLog = build.status === "failed" || (!finished && build.status === "running");
-    if (!finished && !keepLog) continue;
     const { log, ...rest } = build;
     const lines = build.status === "failed" ? FAILED_LOG_LINES : RUNNING_LOG_LINES;
     builds.push(keepLog ? { ...rest, log: log.slice(-lines) } : rest);
@@ -99,6 +124,7 @@ export function snapshot(
     fetches: [...state.fetches.values()],
     counts,
     builds,
+    tree,
     transfers,
     outputs: base.outputs ?? [],
     errors: [...state.errors],

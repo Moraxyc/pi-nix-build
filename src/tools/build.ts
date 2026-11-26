@@ -4,8 +4,9 @@ import {
   truncateTail,
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
-import { type BuildDetails, type RunStatus, snapshot } from "../details.ts";
+import { type BuildDetails, type RunStatus, snapshot, total } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
+import { DependencyGraph } from "../nix/graph.ts";
 import { renderBuild } from "../render.ts";
 import { runNix } from "../runner.ts";
 import { buildCommand, buildParameters, displayCommand } from "./build-command.ts";
@@ -16,11 +17,11 @@ const TIMER_INTERVAL_MS = 1_000;
 
 function progressText(details: BuildDetails): string {
   const { builds, downloads } = details.counts;
-  const total = builds.planned + builds.running + builds.done + builds.failed;
-  if (total === 0 && downloads.running === 0) {
+  const buildTotal = total(builds);
+  if (buildTotal === 0 && downloads.running === 0) {
     return `evaluating (${details.evaluation.files} files)`;
   }
-  return `${builds.done}/${total} built, ${builds.running} running, ${downloads.done} fetched`;
+  return `${builds.done}/${buildTotal} built, ${builds.running} running, ${downloads.done} fetched`;
 }
 
 function summarize(details: BuildDetails, plainStderr: string[]): string {
@@ -35,8 +36,10 @@ function summarize(details: BuildDetails, plainStderr: string[]): string {
     return `${command} was cancelled by the user after ${took} (${work}).`;
   }
 
-  const notBuilt = builds.planned > 0 ? `, ${builds.planned} not built` : "";
-  const lines = [`${command} failed after ${took} (${work}, ${builds.failed} failed${notBuilt}).`];
+  const outcome = [work, `${builds.failed} failed`];
+  if (builds.blocked > 0) outcome.push(`${builds.blocked} blocked by failed dependencies`);
+  if (builds.planned > 0) outcome.push(`${builds.planned} not built`);
+  const lines = [`${command} failed after ${took} (${outcome.join(", ")}).`];
   for (const mismatch of details.hashMismatches) {
     lines.push(
       "",
@@ -78,6 +81,9 @@ export function registerBuildTool(pi: ExtensionAPI): void {
       const command = buildCommand(params);
       const startedAt = Date.now();
       let dirty = true;
+      const graph = new DependencyGraph(() => {
+        dirty = true;
+      });
       const run = await runNix({
         program: command.program,
         args: command.args,
@@ -88,13 +94,17 @@ export function registerBuildTool(pi: ExtensionAPI): void {
         },
       });
       const current = (status: RunStatus, extra: Partial<BuildDetails> = {}) =>
-        snapshot(run.state, {
-          command: displayCommand(command),
-          status,
-          startedAt,
-          logFile: run.logFile,
-          ...extra,
-        });
+        snapshot(
+          run.state,
+          {
+            command: displayCommand(command),
+            status,
+            startedAt,
+            logFile: run.logFile,
+            ...extra,
+          },
+          (drv) => graph.inputsOf(drv),
+        );
 
       let lastUpdate = 0;
       const timer = setInterval(() => {
@@ -102,6 +112,7 @@ export function registerBuildTool(pi: ExtensionAPI): void {
         if (!dirty && now - lastUpdate < TIMER_INTERVAL_MS) return;
         dirty = false;
         lastUpdate = now;
+        graph.request(run.state.builds.keys());
         const details = current("running");
         onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
       }, UPDATE_INTERVAL_MS);
