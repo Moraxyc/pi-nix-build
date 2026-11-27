@@ -33,10 +33,12 @@ English | [简体中文](../zh/development.md)
     ├── jobs/
     │   ├── manager.ts         # Background job manager and message delivery
     │   ├── logs.ts            # Derivation resolution and plain-text log querying for nix_jobs
+    │   ├── drv.ts             # Local .drv context and env inspection for nix_jobs drv
     │   ├── watches.ts         # Watch condition evaluation
     │   └── processes.ts       # Optional pi-processes event-bus integration
     ├── nix/
     │   ├── diagnostics.ts     # Structured root-cause hints for common Nix errors
+    │   ├── drv.ts             # nix derivation show reader and derivation context extractor
     │   ├── events.ts          # @nix internal-json parser
     │   ├── state.ts           # Build, transfer, and CA-derivation state machine
     │   ├── graph.ts           # Local .drv dependency reader
