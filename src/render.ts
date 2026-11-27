@@ -1,5 +1,5 @@
 import type { Theme, ThemeColor } from "@earendil-works/pi-coding-agent";
-import { type Component, truncateToWidth } from "@earendil-works/pi-tui";
+import { type Component, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import {
   type BuildDetails,
   type BuildView,
@@ -8,10 +8,11 @@ import {
   type TransferView,
   total,
 } from "./details.ts";
-import { formatBytes, formatDuration, formatPeer } from "./format.ts";
+import { formatBytes, formatDuration, formatPeer, formatTiming } from "./format.ts";
 import { ICONS } from "./icons.ts";
-import { extraErrors, STDENV_PHASES } from "./nix/state.ts";
+import { extraErrors, STDENV_PHASES, type Status } from "./nix/state.ts";
 import { pathInStore } from "./nix/store.ts";
+import { type BuildProfile, builderLabel, type ProfiledBuild, sharePercent } from "./profile.ts";
 import { pruneForest, type TreeNode } from "./tree.ts";
 
 const PROGRESS_BAR_WIDTH = 20;
@@ -22,6 +23,9 @@ const COLLAPSED_FAILED_LOG = 8;
 const COLLAPSED_OUTPUTS = 3;
 const COLLAPSED_DRY_RUN_LINES = 8;
 const EXPANDED_DRY_RUN_LINES = 60;
+const COLLAPSED_PROFILE_TOP = 3;
+const EXPANDED_PROFILE_TOP = 5;
+const COLLAPSED_CP_STEPS = 4;
 
 const PHASE_COLORS: Record<string, ThemeColor> = {
   unpackPhase: "muted",
@@ -281,6 +285,15 @@ function renderFinished(
       lines.push(...error.split("\n").map((line) => `  ${theme.fg("toolOutput", line)}`));
     }
   }
+  if (details.profile && !details.dryRun) {
+    lines.push(
+      ...renderProfile(
+        details.profile,
+        expanded ? { topN: EXPANDED_PROFILE_TOP, indent: "  " } : { compact: true },
+        theme,
+      ),
+    );
+  }
   return lines;
 }
 
@@ -389,4 +402,204 @@ function failedRow(build: BuildView, theme: Theme): string {
     [phase(build, theme), took, host(build, theme)],
     theme,
   );
+}
+
+/** Renders timing profile, critical path, and builder stats for both chat results and DetailView. */
+export function renderProfile(
+  profile: BuildProfile,
+  options: {
+    compact?: boolean;
+    topN?: number;
+    indent?: string;
+    barWidth?: number;
+    running?: boolean;
+  },
+  theme: Theme,
+): string[] {
+  if (options.compact) return renderCompactProfile(profile, theme);
+  const indent = options.indent ?? " ";
+  const sub = `${indent}  `;
+  const barWidth = options.barWidth ?? 0;
+  const lines: string[] = [];
+
+  const parallel =
+    profile.executedCount > 1 && profile.wallMs > 0
+      ? ` ${theme.fg("dim", `(${(profile.totalBuildMs / profile.wallMs).toFixed(1)}×)`)}`
+      : "";
+  const cpShare =
+    profile.wallMs > 0
+      ? ` ${theme.fg("dim", `(${sharePercent(profile.criticalPathMs, profile.wallMs)}%)`)}`
+      : "";
+  const liveTag = options.running ? `  ${theme.fg("accent", "live")}` : "";
+  const overview = [
+    `${theme.fg("syntaxNumber", formatTiming(profile.wallMs))} ${theme.fg("dim", "wall")}`,
+    `${theme.fg("syntaxNumber", formatTiming(profile.totalBuildMs))} ${theme.fg("dim", "build")}${parallel}`,
+    `${theme.fg("syntaxNumber", formatTiming(profile.criticalPathMs))} ${theme.fg("dim", "critical path")}${cpShare}`,
+  ];
+  lines.push(
+    `${indent}${theme.bold("Timing profile")}${liveTag}  ${overview.join(theme.fg("dim", " · "))}`,
+  );
+
+  const top = profile.topSlowest.slice(0, options.topN ?? profile.topSlowest.length);
+  const topScope =
+    top.length < profile.executedCount ? `${top.length} of ${profile.executedCount}` : top.length;
+  lines.push("", `${indent}${theme.fg("muted", `Top slowest (${topScope})`)}`);
+  const maxDur = top[0]?.durationMs ?? 0;
+  const topNameW = Math.min(36, Math.max(8, ...top.map((b) => visibleWidth(b.name))));
+  const topDurW = Math.max(3, ...top.map((b) => formatTiming(b.durationMs).length));
+  const rankW = String(top.length).length + 1;
+  top.forEach((build, index) => {
+    const rank = theme.fg("dim", padLeft(`${index + 1}.`, rankW));
+    const name = padRight(
+      build.status === "failed" ? theme.fg("error", build.name) : build.name,
+      topNameW,
+    );
+    const barPart =
+      barWidth > 0
+        ? `  ${fillBar(maxDur > 0 ? build.durationMs / maxDur : 0, barWidth, build.status === "failed" ? "error" : build.onCriticalPath ? "warning" : "accent", theme)}`
+        : "";
+    const dur = theme.fg("syntaxNumber", padLeft(formatTiming(build.durationMs), topDurW));
+    const badge = build.onCriticalPath ? theme.fg("warning", "[CP]") : "    ";
+    lines.push(
+      `${sub}${rank} ${statusIcon(build.status, theme)} ${name}${barPart}  ${dur}  ${badge}  ${builderTag(build.host, theme)}`,
+    );
+  });
+
+  const steps = profile.criticalPath;
+  if (steps.length > 0) {
+    const stepWord = steps.length === 1 ? "step" : "steps";
+    const noGraph =
+      !profile.hasDependencies && profile.executedCount > 1 ? " · no dependency graph" : "";
+    const shareText =
+      profile.wallMs > 0 ? ` · ${sharePercent(profile.criticalPathMs, profile.wallMs)}%` : "";
+    lines.push(
+      "",
+      `${indent}${theme.fg("muted", `Critical path (${steps.length} ${stepWord} · ${formatTiming(profile.criticalPathMs)} / ${formatTiming(profile.wallMs)}${shareText}${noGraph})`)}`,
+    );
+    const cpNameW = Math.min(36, Math.max(8, ...steps.map((s) => visibleWidth(s.name))));
+    const cpDurW = Math.max(3, ...steps.map((s) => formatTiming(s.durationMs).length));
+    steps.forEach((step, index) => {
+      const lead = index === 0 ? "  " : `${theme.fg("dim", "→")} `;
+      const name = padRight(
+        step.status === "failed" ? theme.fg("error", step.name) : step.name,
+        cpNameW,
+      );
+      const barPart =
+        barWidth > 0
+          ? `  ${fillBar(profile.criticalPathMs > 0 ? step.durationMs / profile.criticalPathMs : 0, barWidth, step.status === "failed" ? "error" : step.status === "running" ? "accent" : "warning", theme)}`
+          : "";
+      const dur = theme.fg("syntaxNumber", padLeft(formatTiming(step.durationMs), cpDurW));
+      const pct = theme.fg(
+        "dim",
+        padLeft(`${sharePercent(step.durationMs, profile.criticalPathMs)}%`, 4),
+      );
+      lines.push(
+        `${sub}${lead}${statusIcon(step.status, theme)} ${name}${barPart}  ${dur}  ${pct}  ${builderTag(step.host, theme)}`,
+      );
+    });
+  }
+
+  lines.push("", `${indent}${theme.fg("muted", "Builders")}`);
+  const labelW = Math.min(32, Math.max(5, ...profile.builders.map((b) => visibleWidth(b.label))));
+  const countW = Math.max(
+    1,
+    ...profile.builders.map((b) => `${b.builds} ${b.builds === 1 ? "build" : "builds"}`.length),
+  );
+  const durW = Math.max(3, ...profile.builders.map((b) => formatTiming(b.totalMs).length));
+  for (const builder of profile.builders) {
+    const label = padRight(builderTag(builder.host, theme), labelW);
+    const barPart =
+      barWidth > 0
+        ? `  ${fillBar(profile.totalBuildMs > 0 ? builder.totalMs / profile.totalBuildMs : 0, barWidth, builder.host ? "mdLink" : "success", theme)}`
+        : "";
+    const count = padLeft(`${builder.builds} ${builder.builds === 1 ? "build" : "builds"}`, countW);
+    const dur = theme.fg("syntaxNumber", padLeft(formatTiming(builder.totalMs), durW));
+    const pct =
+      profile.totalBuildMs > 0
+        ? ` ${theme.fg("dim", `(${sharePercent(builder.totalMs, profile.totalBuildMs)}%)`)}`
+        : "";
+    const extras = [
+      builder.running > 0 ? theme.fg("accent", `${builder.running} running`) : undefined,
+      builder.failed > 0 ? theme.fg("error", `${builder.failed} failed`) : undefined,
+    ].filter(Boolean);
+    const tail = extras.length > 0 ? `  ${extras.join(theme.fg("dim", " · "))}` : "";
+    lines.push(`${sub}${label}${barPart}  ${count}  ${dur}${pct}${tail}`);
+  }
+  return lines;
+}
+
+function renderCompactProfile(profile: BuildProfile, theme: Theme): string[] {
+  const lines: string[] = [];
+  const sep = theme.fg("dim", " · ");
+  if (profile.executedCount > 1) {
+    const items = profile.topSlowest.slice(0, COLLAPSED_PROFILE_TOP).map((build) => {
+      const mark = build.status === "failed" ? `${theme.fg("error", ICONS.failed)} ` : "";
+      return `${mark}${build.name} ${theme.fg("syntaxNumber", formatTiming(build.durationMs))}`;
+    });
+    lines.push(`  ${theme.fg("muted", "slowest")}  ${items.join(sep)}`);
+  }
+  if (profile.criticalPath.length > 0) {
+    const chain = formatCollapsedChain(profile.criticalPath, theme);
+    const share =
+      profile.wallMs > 0
+        ? ` ${theme.fg("dim", `(${sharePercent(profile.criticalPathMs, profile.wallMs)}%)`)}`
+        : "";
+    lines.push(
+      `  ${theme.fg("muted", "critical path")}  ${chain}  ${theme.fg("syntaxNumber", formatTiming(profile.criticalPathMs))}${share}`,
+    );
+  }
+  const builders = profile.builders.map((b) => {
+    const label = b.host ? theme.fg("mdLink", b.label) : b.label;
+    const failed = b.failed > 0 ? `, ${b.failed} failed` : "";
+    return `${label} ${theme.fg("syntaxNumber", String(b.builds))} ${theme.fg("dim", `(${formatTiming(b.totalMs)}${failed})`)}`;
+  });
+  lines.push(`  ${theme.fg("muted", "builders")}  ${builders.join(sep)}`);
+  return lines;
+}
+
+function formatCollapsedChain(steps: readonly ProfiledBuild[], theme: Theme): string {
+  const arrow = theme.fg("dim", " → ");
+  const renderStep = (step: ProfiledBuild) => {
+    const mark = step.status === "failed" ? `${theme.fg("error", ICONS.failed)} ` : "";
+    return `${mark}${step.name} ${theme.fg("dim", `(${formatTiming(step.durationMs)})`)}`;
+  };
+  if (steps.length <= COLLAPSED_CP_STEPS) return steps.map(renderStep).join(arrow);
+  return [
+    renderStep(steps[0]),
+    renderStep(steps[1]),
+    theme.fg("dim", `… (+${steps.length - 3})`),
+    renderStep(steps[steps.length - 1]),
+  ].join(arrow);
+}
+
+function statusIcon(status: Status, theme: Theme): string {
+  const map: Record<Status, [ThemeColor, string]> = {
+    running: ["accent", ICONS.running],
+    failed: ["error", ICONS.failed],
+    blocked: ["warning", ICONS.blocked],
+    planned: ["dim", ICONS.waiting],
+    done: ["success", ICONS.done],
+  };
+  const [color, icon] = map[status];
+  return theme.fg(color, icon);
+}
+
+function builderTag(hostUri: string | undefined, theme: Theme): string {
+  const label = builderLabel(hostUri);
+  return hostUri ? theme.fg("mdLink", label) : theme.fg("dim", label);
+}
+
+function fillBar(ratio: number, width: number, color: ThemeColor, theme: Theme): string {
+  const clamped = Math.max(0, Math.min(1, ratio));
+  const filled = clamped > 0 ? Math.max(1, Math.round(clamped * width)) : 0;
+  return theme.fg(color, "━".repeat(filled)) + theme.fg("dim", "─".repeat(width - filled));
+}
+
+function padRight(text: string, width: number): string {
+  const clipped = truncateToWidth(text, width, "…");
+  return `${clipped}${" ".repeat(Math.max(0, width - visibleWidth(clipped)))}`;
+}
+
+function padLeft(text: string, width: number): string {
+  return `${" ".repeat(Math.max(0, width - visibleWidth(text)))}${text}`;
 }
