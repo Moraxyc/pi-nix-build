@@ -268,6 +268,11 @@ function renderFinished(
     );
     lines.push(`    ${theme.fg("muted", "got      ")} ${theme.fg("toolDiffAdded", mismatch.got)}`);
   }
+  for (const item of details.hints ?? []) {
+    const subject = item.detail ? ` ${theme.fg("muted", `(${item.detail})`)}` : "";
+    lines.push(`  ${theme.fg("warning", "hint")} ${theme.bold(item.label)}${subject}`);
+    lines.push(`    ${theme.fg("text", item.hint)}`);
+  }
   const mismatched = new Set(details.hashMismatches.map((m) => m.drv));
   for (const build of details.builds.filter((build) => build.status === "failed")) {
     const tail = logTail(build, expanded, theme, "    ");
