@@ -253,7 +253,7 @@ const liveProgress: Scene = {
 const detailView: Scene = {
   name: "detail-view",
   play(screen, logDir) {
-    const { timeline, tool } = releaseImage(screen, logDir);
+    const { timeline, tool, end, output } = releaseImage(screen, logDir);
     const opened = 9_500;
     // Ctrl+Shift+M
     timeline.at(opened, () => screen.widget.openCurrent(screen.ui));
@@ -263,10 +263,11 @@ const detailView: Scene = {
       [20_250, "G"],
       [20_750, "j"],
       [21_500, "j"],
-      [22_750, "\x1b"],
+      [end + 200, "\t"], // Tab: switch to timing profile, critical path, and builder summary
     ];
+    timeline.at(end, () => tool.finish("succeeded", [output]));
     for (const [at, key] of keys) timeline.at(at, () => screen.press(key));
-    timeline.play(screen, 23_250, tool.tick, opened - 1_000);
+    timeline.play(screen, end + 1_200, tool.tick, opened - 1_000);
     screen.hold(FINAL_HOLD_MS);
   },
 };
