@@ -7,25 +7,23 @@ export const evalParameters = Type.Object({
   installable: Type.Optional(
     Type.String({
       description:
-        'Flake installable for `nix eval`, e.g. "nixpkgs#hello.version" or ".#nixosConfigurations.host.config.networking.hostName". Not combined with file, expr or attrs.',
+        'Flake target for `nix eval`, e.g. "nixpkgs#hello.version". Exclusive with file/expr/attrs.',
     }),
   ),
   ...legacySourceParameters("nix-instantiate"),
   apply: Type.Optional(
     Type.String({
-      description:
-        'With installable: a function applied to the value (`--apply`), e.g. "builtins.attrNames".',
+      description: 'Function for `--apply` (installable only), e.g. "builtins.attrNames".',
     }),
   ),
   format: Type.Optional(
     StringEnum(["json", "raw", "nix"] as const, {
-      description:
-        "json (default): the value as JSON, derivations as their output path. raw: a string as is, with installable only. nix: Nix syntax.",
+      description: "json (default), raw (string as-is, installable only), or nix.",
     }),
   ),
   extraArgs: Type.Optional(
     Type.Array(Type.String(), {
-      description: 'Extra flags for nix eval or nix-instantiate, e.g. ["--impure"].',
+      description: 'Extra CLI flags, e.g. ["--impure"].',
     }),
   ),
 });

@@ -30,44 +30,36 @@ const attention = (description: string) => StringEnum(ATTENTIONS, { description 
 export const watchSchema = Type.Object({
   event: StringEnum(WATCH_EVENTS, {
     description:
-      "drv_failed: a build failed (with --keep-going the others continue). drv_built: a build finished. stalled: no output or progress for `minutes`. every: progress report every `minutes`. after: one reminder `minutes` after the watch was added. progress: `percent` of builds done. log_match: a builder log line contains `match`.",
+      "drv_failed | drv_built | stalled (minutes) | every (minutes) | after (minutes) | progress (percent) | log_match (match).",
   }),
   match: Type.Optional(
     Type.String({
       description:
-        'drv_failed, drv_built: build name to look for, e.g. "linux"; omit for every build. log_match: text to find in builder log lines. Literal unless regex is true.',
+        "drv_failed/drv_built: build name filter; log_match: log text. Literal unless regex.",
     }),
   ),
-  regex: Type.Optional(Type.Boolean({ description: "Treat match as a regular expression." })),
+  regex: Type.Optional(Type.Boolean({ description: "Regex match." })),
   minutes: Type.Optional(
-    Type.Number({ exclusiveMinimum: 0, description: "For stalled, every and after." }),
+    Type.Number({ exclusiveMinimum: 0, description: "For stalled/every/after." }),
   ),
   percent: Type.Optional(Type.Number({ minimum: 1, maximum: 100, description: "For progress." })),
   repeat: Type.Optional(
     Type.Boolean({
-      description: "log_match: keep reporting matches (batched) instead of only the first.",
+      description: "log_match: keep reporting batched matches.",
     }),
   ),
-  on: Type.Optional(
-    attention(
-      "turn (default) wakes or steers you; context adds the event to the conversation without waking you; ignore drops it.",
-    ),
-  ),
+  on: Type.Optional(attention("turn (default, wakes), context (silent), ignore.")),
 });
 export type Watch = Static<typeof watchSchema>;
 
 export const exitNotifySchema = {
-  onSuccess: Type.Optional(attention("When the build succeeds. Default turn.")),
-  onFailure: Type.Optional(
-    attention(
-      "When the build fails. Default turn; ignore becomes context, failures always notify.",
-    ),
-  ),
+  onSuccess: Type.Optional(attention("On success (default turn).")),
+  onFailure: Type.Optional(attention("On failure (default turn; ignore→context).")),
 };
 
 export const watchListSchema = Type.Array(watchSchema, {
   maxItems: MAX_WATCHES,
-  description: "Events to be notified about while the build runs.",
+  description: "Run watches.",
 });
 
 /** One watch that went off. */

@@ -6,23 +6,19 @@ export const buildParameters = Type.Object({
   installables: Type.Optional(
     Type.Array(Type.String(), {
       description:
-        'Flake installables for `nix build`, e.g. ".#foo" or "nixpkgs#hello". Default ".". Not combined with file, expr or attrs.',
+        'Flake targets for `nix build`, e.g. ".#foo" (default "."). Exclusive with file/expr/attrs.',
     }),
   ),
   ...legacySourceParameters("nix-build"),
   extraArgs: Type.Optional(
     Type.Array(Type.String(), {
-      description:
-        'Extra flags for nix build or nix-build, e.g. ["--impure", "--keep-going", "-j", "4"].',
+      description: 'Extra CLI flags, e.g. ["--impure", "--keep-going", "-j", "4"].',
     }),
   ),
-  outLink: Type.Optional(
-    Type.String({ description: "Create this result symlink. By default no symlink is created." }),
-  ),
+  outLink: Type.Optional(Type.String({ description: "Result symlink path (default: none)." })),
   dryRun: Type.Optional(
     Type.Boolean({
-      description:
-        "Preview what Nix would build or fetch (`--dry-run`) without building: returns planned derivation count, top-level dependencies, paths to fetch, and rough historical duration estimate.",
+      description: "Preview planned builds, deps, fetches, and estimated duration (`--dry-run`).",
     }),
   ),
 });

@@ -27,11 +27,11 @@ export function registerEvalTool(pi: ExtensionAPI, widget: ProgressWidget): void
     name: "nix_eval",
     label: "Nix Eval",
     description:
-      "Evaluate a Nix value with `nix eval` (flake installable) or `nix-instantiate --eval --strict` (file, expr, attrs) and return it, as JSON by default. Fetches and import-from-derivation builds show live progress. On failure returns Nix's error with its trace, structured root-cause hints for common Nix errors, and the path of the full log. Values over 50KB are cut and saved in full to a file.",
-    promptSnippet: "Evaluate Nix values, as JSON by default; returns the value or the error",
+      "Evaluate a Nix value with `nix eval` (installable) or `nix-instantiate --eval --strict` (file/expr/attrs), as JSON by default. Shows progress for fetches/IFD; cuts values >50KB to a file.",
+    promptSnippet: "Evaluate Nix values (JSON by default); returns value or error",
     promptGuidelines: [
-      "Use nix_eval to read values from Nix code, such as package versions, option values or flake outputs, instead of `nix eval` or `nix-instantiate --eval` in bash, unless the output is piped into another command.",
-      'Narrow large values with nix_eval apply, e.g. apply: "builtins.attrNames", instead of evaluating a whole package set or configuration.',
+      "Use nix_eval instead of `nix eval`/`nix-instantiate --eval` in bash unless piping output.",
+      'Narrow large values with apply (e.g. "builtins.attrNames").',
     ],
     parameters: evalParameters,
 

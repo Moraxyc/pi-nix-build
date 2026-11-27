@@ -5,15 +5,13 @@ export function legacySourceParameters(program: "nix-build" | "nix-instantiate")
   return {
     file: Type.Optional(
       Type.String({
-        description: `Non-flake: Nix file for \`${program}\`. Defaults to ./default.nix when only attrs are given.`,
+        description: `Non-flake file for \`${program}\` (default ./default.nix with attrs).`,
       }),
     ),
-    expr: Type.Optional(
-      Type.String({ description: `Non-flake: Nix expression for \`${program} -E\`.` }),
-    ),
+    expr: Type.Optional(Type.String({ description: `Non-flake expr for \`${program} -E\`.` })),
     attrs: Type.Optional(
       Type.Array(Type.String(), {
-        description: `Non-flake: attribute paths for \`${program} -A\`.`,
+        description: `Non-flake attr paths for \`${program} -A\`.`,
       }),
     ),
   };

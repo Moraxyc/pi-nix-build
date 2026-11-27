@@ -2,30 +2,15 @@ import { type Static, Type } from "typebox";
 import type { BuildCommand } from "../build-run.ts";
 
 export const checkParameters = Type.Object({
-  flake: Type.Optional(
-    Type.String({
-      description: 'Flake URL for `nix flake check`, e.g. "." or "github:owner/repo". Default ".".',
-    }),
-  ),
-  noBuild: Type.Optional(
-    Type.Boolean({
-      description: "Evaluate flake outputs without building checks (`--no-build`).",
-    }),
-  ),
-  allSystems: Type.Optional(
-    Type.Boolean({
-      description: "Check flake outputs for all systems (`--all-systems`).",
-    }),
-  ),
+  flake: Type.Optional(Type.String({ description: 'Flake URL (default ".").' })),
+  noBuild: Type.Optional(Type.Boolean({ description: "Evaluate only (`--no-build`)." })),
+  allSystems: Type.Optional(Type.Boolean({ description: "Check all systems (`--all-systems`)." })),
   outLink: Type.Optional(
-    Type.String({
-      description:
-        "Prefix for result symlinks (`--out-link <path>`). By default no symlinks are created.",
-    }),
+    Type.String({ description: "Result symlink prefix (`--out-link`; default: none)." }),
   ),
   extraArgs: Type.Optional(
     Type.Array(Type.String(), {
-      description: 'Extra flags for nix flake check, e.g. ["--keep-going", "--impure", "-j", "4"].',
+      description: 'Extra CLI flags, e.g. ["--keep-going", "--impure"].',
     }),
   ),
 });

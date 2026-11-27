@@ -18,13 +18,13 @@ export const backgroundParameters = {
   background: Type.Optional(
     Type.Boolean({
       description:
-        "Return at once with a job id and keep running; you are notified when it ends and when a watch fires. Use for runs that take minutes.",
+        "Run asynchronously and return a job id (see nix_jobs). Use for multi-minute runs.",
     }),
   ),
   notify: Type.Optional(
     Type.Object(
       { ...exitNotifySchema, watches: Type.Optional(watchListSchema) },
-      { description: "background: what to be notified about." },
+      { description: "Background notifications and watches." },
     ),
   ),
 };
