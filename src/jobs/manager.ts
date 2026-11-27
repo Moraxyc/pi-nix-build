@@ -68,9 +68,9 @@ export class JobManager {
   }
 
   async start(command: BuildCommand, notify: JobNotify, ctx: ExtensionContext): Promise<Job> {
-    const id = `nix-${this.nextId}`;
     // Checked before Nix starts, so a bad watch fails the call instead of the job.
     const watches = new WatchSet(notify.watches ?? [], Date.now());
+    const id = `nix-${this.nextId++}`;
     const ui = ctx.hasUI ? ctx.ui : undefined;
     const controller = new AbortController();
     const statuses = new Map<string, Status>();
@@ -101,7 +101,6 @@ export class JobManager {
         this.tick(job, details, ui);
       },
     });
-    this.nextId++;
     adopted =
       run.pid === undefined
         ? undefined
