@@ -1,5 +1,5 @@
 import { type Static, Type } from "typebox";
-import type { BuildCommand } from "../build-run.ts";
+import type { BuildCommand } from "../command.ts";
 
 export const checkParameters = Type.Object({
   flake: Type.Optional(Type.String({ description: 'Flake URL (default ".").' })),

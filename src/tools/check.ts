@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { TOOL_NAMES } from "../command.ts";
 import type { JobManager } from "../jobs/manager.ts";
-import type { ProgressWidget } from "../widget.ts";
+import type { LiveSink } from "../live.ts";
 import { checkCommand, checkParameters } from "./check-command.ts";
 import {
   backgroundParameters,
@@ -15,13 +16,9 @@ const parameters = Type.Object({
   ...backgroundParameters,
 });
 
-export function registerCheckTool(
-  pi: ExtensionAPI,
-  widget: ProgressWidget,
-  jobs: JobManager,
-): void {
+export function registerCheckTool(pi: ExtensionAPI, progress: LiveSink, jobs: JobManager): void {
   pi.registerTool({
-    name: "nix_check",
+    name: TOOL_NAMES.check,
     label: "Nix Check",
     description:
       "Run `nix flake check` with live progress. Returns check status or failure diagnostics (logs, .drv context, hash mismatches, hints, eval errors). Supports background: true (see nix_jobs).",
@@ -40,13 +37,13 @@ export function registerCheckTool(
         signal,
         onUpdate,
         ctx,
-        widget,
+        progress,
         jobs,
       );
     },
 
     renderCall(args, theme) {
-      return renderCommandCall("nix_check", checkCommand, args, theme);
+      return renderCommandCall(TOOL_NAMES.check, checkCommand, args, theme);
     },
 
     renderResult(result, options, theme) {

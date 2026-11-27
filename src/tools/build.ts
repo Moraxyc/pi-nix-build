@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { TOOL_NAMES } from "../command.ts";
 import type { JobManager } from "../jobs/manager.ts";
-import type { ProgressWidget } from "../widget.ts";
+import type { LiveSink } from "../live.ts";
 import { buildCommand, buildParameters } from "./build-command.ts";
 import {
   backgroundParameters,
@@ -15,13 +16,9 @@ const parameters = Type.Object({
   ...backgroundParameters,
 });
 
-export function registerBuildTool(
-  pi: ExtensionAPI,
-  widget: ProgressWidget,
-  jobs: JobManager,
-): void {
+export function registerBuildTool(pi: ExtensionAPI, progress: LiveSink, jobs: JobManager): void {
   pi.registerTool({
-    name: "nix_build",
+    name: TOOL_NAMES.build,
     label: "Nix Build",
     description:
       "Build with `nix build` (installables) or `nix-build` (file/expr/attrs) with live progress. Returns outputs, dry-run plan (dryRun: true), or failure diagnostics (logs, .drv context, hash mismatches, hints). Supports background: true (see nix_jobs).",
@@ -41,13 +38,13 @@ export function registerBuildTool(
         signal,
         onUpdate,
         ctx,
-        widget,
+        progress,
         jobs,
       );
     },
 
     renderCall(args, theme) {
-      return renderCommandCall("nix_build", buildCommand, args, theme);
+      return renderCommandCall(TOOL_NAMES.build, buildCommand, args, theme);
     },
 
     renderResult(result, options, theme) {

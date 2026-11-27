@@ -3,16 +3,12 @@ import type {
   ExtensionContext,
   ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
-import {
-  type BuildCommand,
-  type BuildRun,
-  type FinishedBuild,
-  startCommand,
-} from "../build-run.ts";
+import { type BuildRun, type FinishedBuild, startCommand } from "../build-run.ts";
+import type { BuildCommand } from "../command.ts";
 import type { BuildDetails } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
+import type { LiveSink } from "../live.ts";
 import type { Build, Status } from "../nix/state.ts";
-import type { ProgressWidget } from "../widget.ts";
 import { AdoptedProcess } from "./processes.ts";
 import {
   type Attention,
@@ -62,13 +58,13 @@ export interface Job {
 /** Background builds of this session. */
 export class JobManager {
   private readonly pi: ExtensionAPI;
-  private readonly widget: ProgressWidget;
+  private readonly progress: LiveSink;
   private readonly jobs = new Map<string, Job>();
   private nextId = 1;
 
-  constructor(pi: ExtensionAPI, widget: ProgressWidget) {
+  constructor(pi: ExtensionAPI, progress: LiveSink) {
     this.pi = pi;
-    this.widget = widget;
+    this.progress = progress;
   }
 
   async start(command: BuildCommand, notify: JobNotify, ctx: ExtensionContext): Promise<Job> {
@@ -79,26 +75,7 @@ export class JobManager {
     const controller = new AbortController();
     const statuses = new Map<string, Status>();
     let job: Job | undefined;
-    const run = await startCommand(command, {
-      cwd: ctx.cwd,
-      signal: controller.signal,
-      detached: true,
-      onTick: (details) => {
-        if (!job) return;
-        logTransitions(job.run.live.state.builds.values());
-        this.tick(job, details, ui);
-      },
-    });
-    this.nextId++;
-    const adopted =
-      run.pid === undefined
-        ? undefined
-        : AdoptedProcess.adopt(this.pi.events, {
-            name: id,
-            command: run.live.command,
-            cwd: ctx.cwd,
-            pid: run.pid,
-          });
+    let adopted: AdoptedProcess | undefined;
     // In the pi-processes log a build's status line comes before its first log line.
     const logTransitions = (builds: Iterable<Build>) => {
       if (!adopted) return;
@@ -109,11 +86,31 @@ export class JobManager {
         if (line) adopted.log(line);
       }
     };
-    run.live.state.onLog = (build, line) => {
-      watches.log(build, line);
-      logTransitions([build]);
-      adopted?.log(`${build.name}> ${line}`);
-    };
+    const run = await startCommand(command, {
+      cwd: ctx.cwd,
+      signal: controller.signal,
+      detached: true,
+      onLog: (build, line) => {
+        watches.log(build, line);
+        logTransitions([build]);
+        adopted?.log(`${build.name}> ${line}`);
+      },
+      onTick: (details) => {
+        if (!job) return;
+        logTransitions(job.run.live.state.builds.values());
+        this.tick(job, details, ui);
+      },
+    });
+    this.nextId++;
+    adopted =
+      run.pid === undefined
+        ? undefined
+        : AdoptedProcess.adopt(this.pi.events, {
+            name: id,
+            command: run.live.command,
+            cwd: ctx.cwd,
+            pid: run.pid,
+          });
     const started: Job = {
       id,
       run,
@@ -144,7 +141,7 @@ export class JobManager {
     };
     job = started;
     this.jobs.set(id, started);
-    if (ui) this.widget.update(ui, id, run.live);
+    if (ui) this.progress.update(ui, id, run.live);
     return started;
   }
 
@@ -192,7 +189,7 @@ export class JobManager {
   }
 
   private tick(job: Job, details: BuildDetails, ui: ExtensionUIContext | undefined): void {
-    if (ui) this.widget.update(ui, job.id, job.run.live);
+    if (ui) this.progress.update(ui, job.id, job.run.live);
     const { state } = job.run.live;
     const now = Date.now();
     const fired = job.watches.tick({
@@ -213,7 +210,7 @@ export class JobManager {
   }
 
   private async finish(job: Job, result: FinishedBuild): Promise<FinishedBuild> {
-    this.widget.remove(job.id);
+    this.progress.remove(job.id);
     const { status } = result.details;
     let attention: Attention =
       status === "succeeded"

@@ -9,7 +9,7 @@ import {
 import { DetailView } from "./detail-view.ts";
 import { type BuildDetails, total } from "./details.ts";
 import { ICONS } from "./icons.ts";
-import type { LiveRun } from "./live.ts";
+import type { LiveRun, LiveSink } from "./live.ts";
 import { aroundPointerMoves } from "./pointer.ts";
 import { renderProgress, statusLine } from "./render.ts";
 
@@ -47,7 +47,7 @@ interface Hint {
  * Live progress of every running build, above the editor. Tool rows only show a status line, so
  * the progress stays visible when another extension replaces tool rendering.
  */
-export class ProgressWidget {
+export class ProgressWidget implements LiveSink {
   private readonly runs = new Map<string, Run>();
   /** The most recent build, kept after it ends so the detail view can still open it. */
   private latest: LiveRun | undefined;

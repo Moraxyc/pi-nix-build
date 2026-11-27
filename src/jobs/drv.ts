@@ -8,8 +8,8 @@ import {
   trimBlankEdgeLines,
 } from "../nix/drv.ts";
 import { shortStoreItem, storeName } from "../nix/store.ts";
-import { boundOutput, buildMatcher, resolveBuild } from "./logs.ts";
 import type { Job } from "./manager.ts";
+import { boundOutput, buildMatcher, resolveBuild } from "./query.ts";
 
 const MAX_INSPECT_VALUE_LINES = 120;
 const MAX_INSPECT_VALUE_CHARS = 8_000;

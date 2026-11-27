@@ -15,6 +15,7 @@
 │   └── showcase/              # 生成 docs/assets 中的 README 动画
 └── src/
     ├── index.ts               # 扩展入口、快捷键注册与退出清理
+    ├── command.ts             # Nix 命令契约、工具名常量与命令标签格式化
     ├── build-run.ts           # 构建生命周期、快照节流与失败摘要
     ├── runner.ts              # Nix 子进程管理、完整 stderr 日志与信号处理
     ├── details.ts             # 可序列化的工具结果快照
@@ -26,13 +27,14 @@
     ├── pointer.ts             # 指针移出检测包装器
     ├── history.ts             # 耗时历史存储与中位数预估
     ├── format.ts              # 时长、字节、主机 URI 与单行文本格式化
-    ├── live.ts                # 共享 LiveRun 接口
+    ├── live.ts                # 共享 LiveRun 与 LiveSink 接口
     ├── schema.ts              # TypeBox StringEnum 辅助函数
     ├── hooks/
     │   └── bash.ts            # Shell 与 process start 拦截钩子
     ├── jobs/
     │   ├── manager.ts         # 后台任务管理与消息投递
-    │   ├── logs.ts            # nix_jobs 推导解析与纯文本日志检索
+    │   ├── query.ts           # 推导解析、模式匹配与字节截断辅助
+    │   ├── logs.ts            # nix_jobs 纯文本日志检索
     │   ├── drv.ts             # nix_jobs drv 本地 .drv 上下文与环境检索
     │   ├── watches.ts         # 监听条件判定
     │   └── processes.ts       # 可选的 pi-processes 事件总线集成

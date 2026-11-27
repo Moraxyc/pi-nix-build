@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { commandLabel, displayCommand } from "../../src/build-run.ts";
+import { commandLabel, displayCommand } from "../../src/command.ts";
 import { type BuildDetails, snapshot } from "../../src/details.ts";
 import type { LiveRun } from "../../src/live.ts";
 import { ActivityType, parseLine, ResultType, Verbosity } from "../../src/nix/events.ts";

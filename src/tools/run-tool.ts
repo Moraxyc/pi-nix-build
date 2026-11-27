@@ -6,16 +6,17 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import { type Component, Text } from "@earendil-works/pi-tui";
 import { type Static, Type } from "typebox";
-import { type BuildCommand, progressText, startCommand } from "../build-run.ts";
+import { progressText, startCommand } from "../build-run.ts";
+import { BACKGROUND_PARAM, type BuildCommand } from "../command.ts";
 import type { BuildDetails } from "../details.ts";
 import { singleLine } from "../format.ts";
 import { type JobManager, watchLines } from "../jobs/manager.ts";
 import { exitNotifySchema, watchListSchema } from "../jobs/watches.ts";
+import type { LiveSink } from "../live.ts";
 import { renderBuild } from "../render.ts";
-import type { ProgressWidget } from "../widget.ts";
 
 export const backgroundParameters = {
-  background: Type.Optional(
+  [BACKGROUND_PARAM]: Type.Optional(
     Type.Boolean({
       description:
         "Run asynchronously and return a job id (see nix_jobs). Use for multi-minute runs.",
@@ -40,7 +41,7 @@ export async function executeNixCommand(
   signal: AbortSignal | undefined,
   onUpdate: AgentToolUpdateCallback<BuildDetails | undefined> | undefined,
   ctx: ExtensionContext,
-  widget: ProgressWidget,
+  progress: LiveSink,
   jobs: JobManager,
 ): Promise<AgentToolResult<BuildDetails | undefined> & { isError?: boolean }> {
   if (params.notify && !params.background) {
@@ -66,7 +67,7 @@ export async function executeNixCommand(
     cwd: ctx.cwd,
     signal,
     onTick: (details) => {
-      if (ctx.hasUI) widget.update(ctx.ui, toolCallId, run.live);
+      if (ctx.hasUI) progress.update(ctx.ui, toolCallId, run.live);
       onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
     },
   });
@@ -74,7 +75,7 @@ export async function executeNixCommand(
     const { details, text, isError } = await run.finished;
     return { content: [{ type: "text", text }], details, isError };
   } finally {
-    widget.remove(toolCallId);
+    progress.remove(toolCallId);
   }
 }
 

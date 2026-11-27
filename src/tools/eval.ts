@@ -7,13 +7,15 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { type FinishedBuild, progressText, startCommand } from "../build-run.ts";
+import { TOOL_NAMES } from "../command.ts";
 import { type BuildDetails, total } from "../details.ts";
-import { formatDuration, singleLine } from "../format.ts";
+import { formatDuration } from "../format.ts";
 import { ICONS } from "../icons.ts";
+import type { LiveSink } from "../live.ts";
 import { finishedLine, Lines, renderBuild } from "../render.ts";
 import { runArtifactPath } from "../runner.ts";
-import type { ProgressWidget } from "../widget.ts";
 import { evalCommand, evalParameters } from "./eval-command.ts";
+import { renderCommandCall } from "./run-tool.ts";
 
 const COLLAPSED_VALUE_LINES = 5;
 /**
@@ -22,9 +24,9 @@ const COLLAPSED_VALUE_LINES = 5;
  */
 const ONE_LINE_PREVIEW_CHARS = 2_000;
 
-export function registerEvalTool(pi: ExtensionAPI, widget: ProgressWidget): void {
+export function registerEvalTool(pi: ExtensionAPI, progress: LiveSink): void {
   pi.registerTool({
-    name: "nix_eval",
+    name: TOOL_NAMES.eval,
     label: "Nix Eval",
     description:
       "Evaluate a Nix value with `nix eval` (installable) or `nix-instantiate --eval --strict` (file/expr/attrs), as JSON by default. Shows progress for fetches/IFD; cuts values >50KB to a file.",
@@ -43,7 +45,7 @@ export function registerEvalTool(pi: ExtensionAPI, widget: ProgressWidget): void
         signal,
         onTick: (details) => {
           showWidget ||= details.fetches.length > 0 || hasWork(details);
-          if (showWidget && ctx.hasUI) widget.update(ctx.ui, toolCallId, run.live);
+          if (showWidget && ctx.hasUI) progress.update(ctx.ui, toolCallId, run.live);
           onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });
         },
       });
@@ -56,23 +58,12 @@ export function registerEvalTool(pi: ExtensionAPI, widget: ProgressWidget): void
           isError: finished.isError,
         };
       } finally {
-        widget.remove(toolCallId);
+        progress.remove(toolCallId);
       }
     },
 
     renderCall(args, theme) {
-      let title = "nix_eval";
-      let shown: string[] = [];
-      try {
-        ({ title, shownArgs: shown } = evalCommand(args));
-      } catch {
-        // Invalid argument combinations are reported by execute().
-      }
-      return new Text(
-        `${theme.fg("toolTitle", theme.bold(title))} ${singleLine(shown.join(" "))}`,
-        0,
-        0,
-      );
+      return renderCommandCall(TOOL_NAMES.eval, evalCommand, args, theme);
     },
 
     renderResult(result, { expanded }, theme) {

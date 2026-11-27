@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
+import { TOOL_NAMES } from "../command.ts";
 import { ICONS } from "../icons.ts";
 import { jobDrv } from "../jobs/drv.ts";
 import { DEFAULT_LOG_LIMIT, jobLog, MAX_CONTEXT_LINES, MAX_LOG_LIMIT } from "../jobs/logs.ts";
@@ -84,7 +85,7 @@ const parameters = Type.Object({
 
 export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
   pi.registerTool({
-    name: "nix_jobs",
+    name: TOOL_NAMES.jobs,
     label: "Nix Jobs",
     description:
       "Inspect and control background nix_build/nix_check jobs. Use status occasionally, log to read/search build logs, drv to inspect local .drv context or search env, and wait only when blocked on the result.",

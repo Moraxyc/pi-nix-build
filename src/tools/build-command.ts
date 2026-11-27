@@ -1,5 +1,5 @@
 import { type Static, Type } from "typebox";
-import type { BuildCommand } from "../build-run.ts";
+import type { BuildCommand } from "../command.ts";
 import { isLegacySource, legacySourceArgs, legacySourceParameters } from "./legacy-source.ts";
 
 export const buildParameters = Type.Object({

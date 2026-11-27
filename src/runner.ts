@@ -4,13 +4,12 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { createInterface } from "node:readline";
+import type { NixProgram } from "./command.ts";
 import { parseLine } from "./nix/events.ts";
-import { BuildState } from "./nix/state.ts";
+import { type Build, BuildState } from "./nix/state.ts";
 
 /** Nix stops builds and closes daemon connections on SIGINT; SIGKILL only if it hangs. */
 const KILL_GRACE_MS = 5_000;
-
-export type NixProgram = "nix" | "nix-build" | "nix-instantiate";
 
 export interface NixRun {
   /** Full argument list, including the logging flags added here. */
@@ -37,6 +36,8 @@ export async function runNix(options: {
   signal?: AbortSignal;
   /** Own process group, so a process manager can signal Nix and everything it started. */
   detached?: boolean;
+  /** Called with every builder log line as it arrives, before `Build.log` trims its tail. */
+  onLog?: (build: Build, line: string) => void;
   /** Called after each batch of applied events. */
   onChange: () => void;
 }): Promise<NixRun> {
@@ -46,6 +47,7 @@ export async function runNix(options: {
   const logFile = join(logDir, `${Date.now()}-${process.pid}.log`);
   const log = createWriteStream(logFile);
   const state = new BuildState();
+  state.onLog = options.onLog;
   const plainStderr: string[] = [];
 
   const child = spawn(options.program, args, {

@@ -1,4 +1,5 @@
 import { DEFAULT_MAX_BYTES, truncateHead, truncateTail } from "@earendil-works/pi-coding-agent";
+import { type BuildCommand, commandLabel, displayCommand } from "./command.ts";
 import {
   type BuildDetails,
   type BuildView,
@@ -9,15 +10,15 @@ import {
   sumEstimates,
   total,
 } from "./details.ts";
-import { formatDuration, formatPeer, singleLine } from "./format.ts";
+import { formatDuration, formatPeer } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { diagnoseErrors, formatHintLine } from "./nix/diagnostics.ts";
 import { type DrvContext, formatDrvContextText, readDrvContexts } from "./nix/drv.ts";
 import { DependencyGraph } from "./nix/graph.ts";
-import { type BuildState, extraErrors } from "./nix/state.ts";
+import { type Build, type BuildState, extraErrors } from "./nix/state.ts";
 import { formatProfileText } from "./profile.ts";
-import { buildLogPath, type NixProgram, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
+import { buildLogPath, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
 import { pruneForest } from "./tree.ts";
 
 /** Snapshots are throttled; timers on screen need one per second. */
@@ -26,27 +27,6 @@ const TIMER_INTERVAL_MS = 1_000;
 const MAX_DRY_RUN_TREE_LINES = 60;
 
 let history: Promise<DurationHistory> | undefined;
-
-export interface BuildCommand {
-  program: NixProgram;
-  args: string[];
-  title: string;
-  /** Arguments as the user would type them, without output and logging flags. */
-  shownArgs: string[];
-  dryRun?: boolean;
-  parseOutputs(stdout: string): string[];
-}
-
-/** One row: a multi-line `-E` expression would break the layout of every place it is shown. */
-export function displayCommand(command: BuildCommand): string {
-  return singleLine([command.title, ...command.shownArgs].join(" "));
-}
-
-/** The command with an `-E` expression folded to `…`; the widget row cuts it anyway. */
-export function commandLabel(command: BuildCommand): string {
-  const args = command.shownArgs.map((arg, i, all) => (all[i - 1] === "-E" ? "…" : arg));
-  return singleLine([command.title, ...args].join(" "));
-}
 
 export interface BuildRun {
   command: BuildCommand;
@@ -71,6 +51,8 @@ export interface RunOptions {
   cwd: string;
   signal?: AbortSignal;
   detached?: boolean;
+  /** Called with every builder log line as it arrives. */
+  onLog?: (build: Build, line: string) => void;
   /** Called with each new snapshot while the build runs. */
   onTick: (details: BuildDetails) => void;
 }
@@ -91,6 +73,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
     cwd: options.cwd,
     signal: options.signal,
     detached: options.detached,
+    onLog: options.onLog,
     onChange: () => {
       dirty = true;
       lastActivity = Date.now();

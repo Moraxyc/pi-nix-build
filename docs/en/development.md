@@ -15,6 +15,7 @@ English | [简体中文](../zh/development.md)
 │   └── showcase/              # Renders the README animations in docs/assets
 └── src/
     ├── index.ts               # Extension entry point, shortcuts, shutdown cleanup
+    ├── command.ts             # Nix command contract, tool names, and label formatters
     ├── build-run.ts           # Build lifecycle, snapshot throttling, failure summary
     ├── runner.ts              # Nix subprocess runner, full stderr log, signal handling
     ├── details.ts             # Serializable tool-result snapshot
@@ -26,13 +27,14 @@ English | [简体中文](../zh/development.md)
     ├── pointer.ts             # Pointer-leave detection wrapper
     ├── history.ts             # Duration history store and median estimator
     ├── format.ts              # Duration, byte, peer URI, and single-line formatters
-    ├── live.ts                # Shared LiveRun interface
+    ├── live.ts                # Shared LiveRun and LiveSink interfaces
     ├── schema.ts              # TypeBox StringEnum helper
     ├── hooks/
     │   └── bash.ts            # Shell and process start interception hook
     ├── jobs/
     │   ├── manager.ts         # Background job manager and message delivery
-    │   ├── logs.ts            # Derivation resolution and plain-text log querying for nix_jobs
+    │   ├── query.ts           # Derivation resolution, pattern matching, and byte-bounded output
+    │   ├── logs.ts            # Plain-text build log querying for nix_jobs
     │   ├── drv.ts             # Local .drv context and env inspection for nix_jobs drv
     │   ├── watches.ts         # Watch condition evaluation
     │   └── processes.ts       # Optional pi-processes event-bus integration
