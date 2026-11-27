@@ -36,6 +36,7 @@
     │   ├── watches.ts         # 监听条件判定
     │   └── processes.ts       # 可选的 pi-processes 事件总线集成
     ├── nix/
+    │   ├── diagnostics.ts     # 高频 Nix 错误的结构化根因提示分类器
     │   ├── events.ts          # @nix internal-json 解析器
     │   ├── state.ts           # 构建、传输与 CA 推导状态机
     │   ├── graph.ts           # 本地 .drv 依赖读取器
@@ -108,7 +109,7 @@ nix flake check
 3. `lint`：执行 `biome lint --vcs-enabled=false`。
 4. `upstream`：对照 `dev/flake.nix` 中锁定的 `nix` 与 `nixpkgs` 源码运行 `node dev/check-upstream.ts <nix> <nixpkgs>`，校验：
    - `src/nix/events.ts` 中的 `ActivityType`、`ResultType`、`Verbosity` 与 `nix/util/logging.hh`、`nix/util/error.hh` 一致。
-   - `src/nix/state.ts` 中的 `UPSTREAM_MESSAGES` 片段仍存在于 Nix C++ 源码中。
+   - `src/nix/state.ts` 中的 `UPSTREAM_MESSAGES` 与 `src/nix/diagnostics.ts` 中的 `UPSTREAM_DIAGNOSTIC_MESSAGES` 片段仍存在于 Nix C++ 源码中。
    - `src/nix/state.ts` 中的 `STDENV_PHASES` 与 `pkgs/stdenv/generic/setup.sh` 的 `definePhases()` 一致。
 5. `treefmt`：校验 `nixfmt` 与 `biome` 格式规范。
 

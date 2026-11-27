@@ -26,7 +26,7 @@ Runs `nix build` or `nix-build` with live progress reporting in the UI.
 
 - **Invocation**: Appends `--log-format internal-json -v` (plus `--json` for `nix build`) and saves raw stderr to `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`.
 - **Success**: Returns elapsed time, built and fetched counts, and output store paths. With `dryRun: true`, returns the planned derivation count, top-level dependency tree (from `.drv` inputs), planned fetch count, and a rough duration estimate from median historical build times.
-- **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt; omitted when nothing was built or fetched), fixed-output hash mismatches (`drv`, `specified`, `got`), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, clean plain-text log file paths (`<timestamp>-<pid>-<hash>-<name>.log`) saved automatically for each failed derivation that emitted logs, and the raw `@nix` `internal-json` stderr log path.
+- **Failure**: Returns status counts (built, fetched, failed, blocked by failed dependencies, unbuilt; omitted when nothing was built or fetched), fixed-output hash mismatches (`drv`, `specified`, `got`), structured one-line root-cause hints for common Nix errors (such as untracked flake files, sandbox network blocks, pure-eval restrictions, daemon/remote-store connection errors, store/SQLite locks, IFD/experimental feature restrictions, platform/feature mismatches, unfree packages, and disk-full errors), failed derivations with phase, remote host, and up to 80 trailing log lines (or Nix's error text if no build log was emitted), evaluation or non-derivation errors, clean plain-text log file paths (`<timestamp>-<pid>-<hash>-<name>.log`) saved automatically for each failed derivation that emitted logs, and the raw `@nix` `internal-json` stderr log path.
 - **Cancellation**: On `AbortSignal` or pi shutdown, sends `SIGINT` so Nix stops active builds and closes daemon connections, escalating to `SIGKILL` after 5 seconds.
 
 ## `nix_check`
@@ -51,7 +51,7 @@ Runs `nix flake check` with live progress reporting, dependency tree, failure di
 
 - **Invocation**: Runs `nix flake check <flake> [--no-build] [--all-systems] [--out-link <path>] [extraArgs...]` with `--log-format internal-json -v` and saves raw stderr to `<tmpdir>/pi-nix-build/<timestamp>-<pid>.log`.
 - **Success**: Returns elapsed time plus built and fetched counts (and output store paths if `--print-out-paths` is passed in `extraArgs`).
-- **Failure**: Returns status counts, fixed-output hash mismatches, failed derivations with trailing log lines and clean plain-text log file paths, any evaluation errors (including alongside failed checks under `--keep-going`), and the raw `@nix` log path.
+- **Failure**: Returns status counts, fixed-output hash mismatches, structured root-cause hints for common Nix errors, failed derivations with trailing log lines and clean plain-text log file paths, any evaluation errors (including alongside failed checks under `--keep-going`), and the raw `@nix` log path.
 - **Cancellation**: Same as `nix_build`.
 
 ## `nix_eval`

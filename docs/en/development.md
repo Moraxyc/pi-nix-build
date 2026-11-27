@@ -36,6 +36,7 @@ English | [简体中文](../zh/development.md)
     │   ├── watches.ts         # Watch condition evaluation
     │   └── processes.ts       # Optional pi-processes event-bus integration
     ├── nix/
+    │   ├── diagnostics.ts     # Structured root-cause hints for common Nix errors
     │   ├── events.ts          # @nix internal-json parser
     │   ├── state.ts           # Build, transfer, and CA-derivation state machine
     │   ├── graph.ts           # Local .drv dependency reader
@@ -108,7 +109,7 @@ Included checks:
 3. `lint`: Runs `biome lint --vcs-enabled=false`.
 4. `upstream`: Runs `node dev/check-upstream.ts <nix> <nixpkgs>` against the pinned `nix` and `nixpkgs` inputs in `dev/flake.nix` to verify:
    - `ActivityType`, `ResultType`, and `Verbosity` in `src/nix/events.ts` match `nix/util/logging.hh` and `nix/util/error.hh`.
-   - `UPSTREAM_MESSAGES` fragments in `src/nix/state.ts` still exist in Nix C++ sources.
+   - `UPSTREAM_MESSAGES` in `src/nix/state.ts` and `UPSTREAM_DIAGNOSTIC_MESSAGES` in `src/nix/diagnostics.ts` still exist in Nix C++ sources.
    - `STDENV_PHASES` in `src/nix/state.ts` matches `definePhases()` in `pkgs/stdenv/generic/setup.sh`.
 5. `treefmt`: Verifies formatting with `nixfmt` and `biome`.
 
