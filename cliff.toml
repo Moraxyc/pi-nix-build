@@ -1,0 +1,51 @@
+# git-cliff configuration for GitHub Release notes
+# https://git-cliff.org/docs/configuration
+
+[changelog]
+body = """
+{%- for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}\
+  {% if commit.breaking %}**BREAKING**: {% endif %}\
+  {{ commit.message | split(pat="\n") | first | trim | upper_first }} \
+  ([{{ commit.id | truncate(length=7, end="") }}](<REPO>/commit/{{ commit.id }}))
+{%- endfor %}
+{% endfor %}
+{%- if version and previous.version %}
+**Full Changelog**: <REPO>/compare/{{ previous.version }}...{{ version }}
+{%- endif %}
+"""
+trim = true
+render_always = true
+postprocessors = [
+  { pattern = '<REPO>', replace = "https://github.com/Moraxyc/pi-nix-build" },
+]
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+protect_breaking_commits = true
+commit_preprocessors = [
+  { pattern = '\(#([0-9]+)\)', replace = "([#${1}](<REPO>/pull/${1}))" },
+]
+commit_parsers = [
+  { message = "^feat", group = "<!-- 00 -->Features" },
+  { message = "^fix", group = "<!-- 01 -->Bug Fixes" },
+  { message = "^perf", group = "<!-- 02 -->Performance" },
+  { message = "^refactor", group = "<!-- 03 -->Refactor" },
+  { message = "^doc", group = "<!-- 04 -->Documentation" },
+  { message = "^build", group = "<!-- 05 -->Build" },
+  { message = "^ci", group = "<!-- 06 -->CI" },
+  { message = "^style", group = "<!-- 07 -->Styling" },
+  { message = "^test", group = "<!-- 08 -->Testing" },
+  { message = "^revert", group = "<!-- 09 -->Revert" },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^chore\\(deps.*\\)", group = "<!-- 10 -->Dependencies" },
+  { message = "^chore", group = "<!-- 11 -->Miscellaneous" },
+  { body = ".*security", group = "<!-- 12 -->Security" },
+  { message = ".*", group = "<!-- 13 -->Other" },
+]
+filter_commits = false
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"

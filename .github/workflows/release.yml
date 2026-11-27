@@ -116,10 +116,11 @@ jobs:
       VERSION: ${{ needs.build.outputs.version }}
       TARBALL: dist/${{ needs.build.outputs.tarball }}
     steps:
-      # Only for `--inputs-from .`, so gh comes from the pinned nixpkgs.
+      # Full history lets git-cliff resolve tags and commits; `--inputs-from .` pins tools.
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Install Nix
@@ -143,14 +144,20 @@ jobs:
           permission-contents: write
 
       - name: Publish GitHub Release
-        shell: nix shell --inputs-from . nixpkgs#gh --command bash -euo pipefail {0}
+        shell: nix shell --inputs-from . nixpkgs#git-cliff nixpkgs#gh --command bash -euo pipefail {0}
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           GH_REPO: ${{ github.repository }}
         # Immutable releases freeze assets on publish, so attach them to a draft first.
         run: |
+          notes=$(mktemp)
+          trap 'rm -f "$notes"' EXIT
+          git-cliff --current --output "$notes"
+          if [[ ! -s "$notes" ]]; then
+            printf 'Release %s\n' "$GITHUB_REF_NAME" > "$notes"
+          fi
           prerelease=()
           if [[ "$VERSION" == *-* ]]; then prerelease=(--prerelease); fi
           gh release create "$GITHUB_REF_NAME" "$TARBALL" --draft --verify-tag \
-            --title "$GITHUB_REF_NAME" --generate-notes "${prerelease[@]}"
+            --title "$GITHUB_REF_NAME" --notes-file "$notes" "${prerelease[@]}"
           gh release edit "$GITHUB_REF_NAME" --draft=false
