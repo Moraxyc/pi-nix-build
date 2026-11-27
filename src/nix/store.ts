@@ -1,13 +1,13 @@
 // Store paths are matched by their hash part, so any store directory works.
 
 /** Nix's base-32 alphabet: digits and lowercase letters without e, o, u and t. */
-const HASH = "[0-9a-df-np-sv-z]{32}";
+export const STORE_HASH = "[0-9a-df-np-sv-z]{32}";
 
 /** An absolute store path, possibly followed by a path inside it. */
-export const STORE_PATH = new RegExp(`/\\S*?/${HASH}-[^/\\s'"]+`);
+export const STORE_PATH = new RegExp(`/\\S*?/${STORE_HASH}-[^/\\s'"]+`);
 
-const STORE_PREFIX = new RegExp(`^.*?/${HASH}-[^/]+/`);
-const HASH_PART = new RegExp(`^${HASH}-`);
+const STORE_PREFIX = new RegExp(`^.*?/${STORE_HASH}-[^/]+/`);
+const HASH_PART = new RegExp(`^${STORE_HASH}-`);
 
 /** `/nix/store/<hash>-hello-2.12.drv` → `hello-2.12` */
 export function storeName(path: string): string {

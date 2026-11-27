@@ -1,3 +1,4 @@
+import { diagnoseErrors, type ErrorHint } from "./nix/diagnostics.ts";
 import type { BuildState, HashMismatch, Status, TransferKind } from "./nix/state.ts";
 import { type BuildProfile, computeProfile } from "./profile.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
@@ -64,6 +65,8 @@ export interface BuildDetails {
   outputs: string[];
   errors: string[];
   hashMismatches: HashMismatch[];
+  /** Structured root-cause hints for known high-frequency Nix errors. */
+  hints?: ErrorHint[];
   /** Timing profile, critical path, and builder distribution once the run ends. */
   profile?: BuildProfile;
   logFile: string;
@@ -127,10 +130,12 @@ export function snapshot(
     inputsOf = () => undefined,
     estimate = () => undefined,
     failedLogs,
+    plainStderr,
   }: {
     inputsOf?: (drv: string) => readonly string[] | undefined;
     estimate?: (name: string, host: string | undefined) => number | undefined;
     failedLogs?: ReadonlyMap<string, string>;
+    plainStderr?: readonly string[];
   } = {},
 ): BuildDetails {
   const finished = base.status !== "running";
@@ -185,6 +190,15 @@ export function snapshot(
     const { name, kind, peer, bytesDone, bytesExpected } = transfer;
     transfers.push({ name, kind, peer, bytesDone, bytesExpected });
   }
+  const hints =
+    base.status === "failed"
+      ? diagnoseErrors({
+          errors: state.errors,
+          plainStderr,
+          builds,
+          hashMismatches: state.hashMismatches,
+        })
+      : [];
   const profile =
     finished && !dryRunDone
       ? computeProfile(state.builds.values(), inputsOf, {
@@ -203,6 +217,7 @@ export function snapshot(
     outputs: base.outputs ?? [],
     errors: [...state.errors],
     hashMismatches: [...state.hashMismatches],
+    ...(hints.length > 0 ? { hints } : {}),
     ...(profile ? { profile } : {}),
   };
 }

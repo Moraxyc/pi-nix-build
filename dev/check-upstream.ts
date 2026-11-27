@@ -3,6 +3,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { UPSTREAM_DIAGNOSTIC_MESSAGES } from "../src/nix/diagnostics.ts";
 import { ActivityType, ResultType, Verbosity } from "../src/nix/events.ts";
 import { STDENV_PHASES, UPSTREAM_MESSAGES } from "../src/nix/state.ts";
 
@@ -72,7 +73,7 @@ const cxx = readdirSync(join(nixSource, "src"), { recursive: true, encoding: "ut
   .filter((file) => file.endsWith(".cc"))
   .map((file) => read(join(nixSource, "src"), file))
   .join("\n");
-for (const fragment of UPSTREAM_MESSAGES) {
+for (const fragment of [...UPSTREAM_MESSAGES, ...UPSTREAM_DIAGNOSTIC_MESSAGES]) {
   if (!cxx.includes(fragment))
     problems.push(`message fragment no longer in Nix source: ${fragment}`);
 }

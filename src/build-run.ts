@@ -11,6 +11,7 @@ import {
 import { formatDuration, formatPeer, singleLine } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
+import { diagnoseErrors, formatHintLine } from "./nix/diagnostics.ts";
 import { DependencyGraph } from "./nix/graph.ts";
 import { type BuildState, extraErrors } from "./nix/state.ts";
 import { formatProfileText } from "./profile.ts";
@@ -97,6 +98,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
     status: RunStatus,
     extra: Partial<BuildDetails> = {},
     failedLogs?: ReadonlyMap<string, string>,
+    plainStderr?: readonly string[],
   ) =>
     snapshot(
       run.state,
@@ -112,6 +114,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         inputsOf: (drv) => graph.inputsOf(drv),
         estimate: (name, host) => durations.estimate(name, host, Boolean(command.dryRun)),
         failedLogs,
+        plainStderr,
       },
     );
 
@@ -168,6 +171,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
           outputs: command.parseOutputs(exit.stdout),
         },
         failedLogs,
+        exit.plainStderr,
       );
       return {
         details: latest,
@@ -275,6 +279,17 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
     lines.push("", ...otherErrors);
   } else if (!hasBuildFailures) {
     lines.push("", ...plainStderr);
+  }
+  const hints =
+    details.hints ??
+    diagnoseErrors({
+      errors: details.errors,
+      plainStderr,
+      builds: details.builds,
+      hashMismatches: details.hashMismatches,
+    });
+  if (hints.length > 0) {
+    lines.push("", "Hints:", ...hints.map((item) => `- ${formatHintLine(item)}`));
   }
   if (details.profile) lines.push("", ...formatProfileText(details.profile));
   lines.push("", `Raw Nix log (internal-json): ${details.logFile}`);
