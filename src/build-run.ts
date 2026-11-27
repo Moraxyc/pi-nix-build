@@ -13,6 +13,7 @@ import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { DependencyGraph } from "./nix/graph.ts";
 import { type BuildState, extraErrors } from "./nix/state.ts";
+import { formatProfileText } from "./profile.ts";
 import { buildLogPath, type NixProgram, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
 import { pruneForest } from "./tree.ts";
 
@@ -138,6 +139,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
   const finished = (async (): Promise<FinishedBuild> => {
     try {
       const exit = await run.done;
+      const finishedAt = Date.now();
       // Estimates are a display aid; failing to save them must not fail the build.
       await durations.record(finishedBuilds(run.state)).catch(() => {});
       const status: RunStatus = exit.cancelled
@@ -145,8 +147,15 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         : exit.code === 0
           ? "succeeded"
           : "failed";
-      if (command.dryRun && status === "succeeded" && run.state.builds.size > 0) {
-        await graph.load(run.state.builds.keys());
+      if (command.dryRun) {
+        if (status === "succeeded" && run.state.builds.size > 0) {
+          await graph.load(run.state.builds.keys());
+        }
+      } else {
+        const executed = [...run.state.builds.values()]
+          .filter((build) => build.startedAt !== undefined)
+          .map((build) => build.drv);
+        if (executed.length > 0) await graph.load(executed);
       }
       const failedLogs =
         status === "failed"
@@ -155,7 +164,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
       latest = current(
         status,
         {
-          finishedAt: Date.now(),
+          finishedAt,
           outputs: command.parseOutputs(exit.stdout),
         },
         failedLogs,
@@ -223,13 +232,17 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
   const work = `${builds.done} built, ${downloads.done} fetched`;
   if (details.status === "succeeded") {
     const summary = `${command} succeeded in ${took} (${work}).`;
-    if (details.outputs.length === 0) return summary;
-    return [`${summary} Outputs:`, ...details.outputs].join("\n");
+    const lines =
+      details.outputs.length === 0 ? [summary] : [`${summary} Outputs:`, ...details.outputs];
+    if (details.profile) lines.push("", ...formatProfileText(details.profile));
+    return lines.join("\n");
   }
   // Counts of nothing, as after an evaluation error, would only hide the error behind zeros.
   const idle = total(builds) + total(downloads) === 0;
   if (details.status === "cancelled") {
-    return `${command} was cancelled after ${took}${idle ? "" : ` (${work})`}.`;
+    const lines = [`${command} was cancelled after ${took}${idle ? "" : ` (${work})`}.`];
+    if (details.profile) lines.push("", ...formatProfileText(details.profile));
+    return lines.join("\n");
   }
 
   const outcome = [work, `${builds.failed} failed`];
@@ -263,6 +276,7 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
   } else if (!hasBuildFailures) {
     lines.push("", ...plainStderr);
   }
+  if (details.profile) lines.push("", ...formatProfileText(details.profile));
   lines.push("", `Raw Nix log (internal-json): ${details.logFile}`);
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
 }

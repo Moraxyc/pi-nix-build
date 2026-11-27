@@ -1,4 +1,5 @@
 import type { BuildState, HashMismatch, Status, TransferKind } from "./nix/state.ts";
+import { type BuildProfile, computeProfile } from "./profile.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
 
 // Tool result details: plain JSON, persisted in the session and read by the renderer.
@@ -63,6 +64,8 @@ export interface BuildDetails {
   outputs: string[];
   errors: string[];
   hashMismatches: HashMismatch[];
+  /** Timing profile, critical path, and builder distribution once the run ends. */
+  profile?: BuildProfile;
   logFile: string;
 }
 
@@ -182,6 +185,13 @@ export function snapshot(
     const { name, kind, peer, bytesDone, bytesExpected } = transfer;
     transfers.push({ name, kind, peer, bytesDone, bytesExpected });
   }
+  const profile =
+    finished && !dryRunDone
+      ? computeProfile(state.builds.values(), inputsOf, {
+          startedAt: base.startedAt,
+          endAt: base.finishedAt ?? base.startedAt,
+        })
+      : undefined;
   return {
     ...base,
     evaluation: { ...state.evaluation },
@@ -193,5 +203,6 @@ export function snapshot(
     outputs: base.outputs ?? [],
     errors: [...state.errors],
     hashMismatches: [...state.hashMismatches],
+    ...(profile ? { profile } : {}),
   };
 }

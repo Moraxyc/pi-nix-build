@@ -6,6 +6,14 @@ export function formatDuration(ms: number): string {
   return `${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, "0")}m`;
 }
 
+/** Sub-second builds show milliseconds (e.g. `420ms`) so fast derivations do not read as `0s`. */
+export function formatTiming(ms: number): string {
+  const rounded = Math.max(0, Math.round(ms));
+  if (rounded === 0) return "0s";
+  if (rounded < 1_000) return `${rounded}ms`;
+  return formatDuration(rounded);
+}
+
 const BYTE_UNITS = ["B", "KiB", "MiB", "GiB", "TiB"];
 
 export function formatBytes(bytes: number): string {
