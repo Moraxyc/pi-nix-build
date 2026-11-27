@@ -24,12 +24,11 @@ export function registerCheckTool(
     name: "nix_check",
     label: "Nix Check",
     description:
-      "Run `nix flake check` to verify flake outputs and build its checks with live progress. On failure returns failed derivations with their last log lines, clean plain-text log file paths for each failed derivation, hash mismatches of fixed-output derivations, structured root-cause hints for common Nix errors, evaluation errors, and the raw Nix log path. With background: true it returns a job id at once; see nix_jobs.",
-    promptSnippet: "Run nix flake check with live progress; returns check status or failure logs",
+      "Run `nix flake check` with live progress. Returns check status or failure diagnostics (logs, .drv context, hash mismatches, hints, eval errors). Supports background: true (see nix_jobs).",
+    promptSnippet: "Run nix flake check with live progress; returns status or failure diagnostics",
     promptGuidelines: [
-      "Use nix_check instead of running `nix flake check` in bash or as a process, or splitting checks into separate nix_build calls: the user sees check progress and failures come back with their logs.",
-      'Pass extraArgs: ["--keep-going"] to report all failing checks in one run; pass noBuild: true to verify flake evaluation without building checks.',
-      "For nix_check runs that may take minutes, pass background: true and continue with other work. You are woken when the check ends; add notify.watches for earlier events, e.g. drv_failed with --keep-going, stalled for remote builders that may hang, or every for periodic progress. Do not poll nix_jobs status.",
+      "Use nix_check instead of `nix flake check` in bash/process or manual nix_build calls.",
+      'Use extraArgs: ["--keep-going"] to collect all failures, or noBuild: true for eval-only checks.',
     ],
     parameters,
 

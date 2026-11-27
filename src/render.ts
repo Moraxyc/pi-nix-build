@@ -4,12 +4,14 @@ import {
   type BuildDetails,
   type BuildView,
   dryRunEstimate,
+  isMismatchedBuild,
   sumEstimates,
   type TransferView,
   total,
 } from "./details.ts";
 import { formatBytes, formatDuration, formatPeer, formatTiming } from "./format.ts";
 import { ICONS } from "./icons.ts";
+import type { DrvContext } from "./nix/drv.ts";
 import { extraErrors, STDENV_PHASES, type Status } from "./nix/state.ts";
 import { pathInStore } from "./nix/store.ts";
 import { type BuildProfile, builderLabel, type ProfiledBuild, sharePercent } from "./profile.ts";
@@ -273,12 +275,15 @@ function renderFinished(
     lines.push(`  ${theme.fg("warning", "hint")} ${theme.bold(item.label)}${subject}`);
     lines.push(`    ${theme.fg("text", item.hint)}`);
   }
-  const mismatched = new Set(details.hashMismatches.map((m) => m.drv));
   for (const build of details.builds.filter((build) => build.status === "failed")) {
+    const mismatched = isMismatchedBuild(build, details.hashMismatches);
     const tail = logTail(build, expanded, theme, "    ");
     lines.push(`  ${failedRow(build, theme)}`, ...tail);
-    if (tail.length === 0 && build.error && !mismatched.has(build.drv)) {
+    if (tail.length === 0 && build.error && !mismatched) {
       lines.push(...build.error.split("\n").map((line) => `    ${theme.fg("toolOutput", line)}`));
+    }
+    if (expanded && build.drvContext && !mismatched) {
+      lines.push(...renderDrvContext(build.drvContext, theme));
     }
   }
   if (details.status === "failed") {
@@ -407,6 +412,29 @@ function failedRow(build: BuildView, theme: Theme): string {
     [phase(build, theme), took, host(build, theme)],
     theme,
   );
+}
+
+function renderDrvContext(context: DrvContext, theme: Theme): string[] {
+  const lines = [
+    `    ${theme.fg("accent", "derivation")} ${theme.fg("dim", `(${context.system})`)}`,
+  ];
+  const row = (label: string, value: string) =>
+    lines.push(`      ${theme.fg("muted", `${label}:`)} ${theme.fg("toolOutput", value)}`);
+  if (context.builder) row("builder", context.builder);
+  if (context.nativeBuildInputs?.length) {
+    row("nativeBuildInputs", context.nativeBuildInputs.join(", "));
+  }
+  if (context.buildInputs?.length) row("buildInputs", context.buildInputs.join(", "));
+  if (context.inputs?.length) row("inputs", context.inputs.join(", "));
+  if (context.patches?.length) row("patches", context.patches.join(", "));
+  if (context.script) {
+    lines.push(`      ${theme.fg("muted", `${context.script.name}:`)}`);
+    for (const line of context.script.content.split("\n")) {
+      lines.push(`        ${theme.fg("toolOutput", line)}`);
+    }
+    if (context.script.truncated) lines.push(`        ${theme.fg("dim", "… (truncated)")}`);
+  }
+  return lines;
 }
 
 /** Renders timing profile, critical path, and builder stats for both chat results and DetailView. */

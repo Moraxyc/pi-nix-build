@@ -1,5 +1,7 @@
 import { diagnoseErrors, type ErrorHint } from "./nix/diagnostics.ts";
+import type { DrvContext } from "./nix/drv.ts";
 import type { BuildState, HashMismatch, Status, TransferKind } from "./nix/state.ts";
+import { storeName } from "./nix/store.ts";
 import { type BuildProfile, computeProfile } from "./profile.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
 
@@ -25,6 +27,8 @@ export interface BuildView {
   log?: string[];
   /** Plain-text full build log saved to disk when this derivation failed. */
   logFile?: string;
+  /** Compact derivation context parsed from the local `.drv` when this derivation failed. */
+  drvContext?: DrvContext;
 }
 
 export interface TransferView {
@@ -87,6 +91,13 @@ export interface DryRunEstimate {
   planned: number;
 }
 
+export function isMismatchedBuild(
+  build: Pick<BuildView, "drv" | "name">,
+  mismatches: readonly HashMismatch[],
+): boolean {
+  return mismatches.some((m) => m.drv === build.drv || storeName(m.drv) === build.name);
+}
+
 export function dryRunEstimate(details: BuildDetails): DryRunEstimate {
   let totalMs = 0;
   let known = 0;
@@ -130,11 +141,13 @@ export function snapshot(
     inputsOf = () => undefined,
     estimate = () => undefined,
     failedLogs,
+    failedDrvContexts,
     plainStderr,
   }: {
     inputsOf?: (drv: string) => readonly string[] | undefined;
     estimate?: (name: string, host: string | undefined) => number | undefined;
     failedLogs?: ReadonlyMap<string, string>;
+    failedDrvContexts?: ReadonlyMap<string, DrvContext>;
     plainStderr?: readonly string[];
   } = {},
 ): BuildDetails {
@@ -174,6 +187,11 @@ export function snapshot(
     if (build.status === "failed" && error) view.error = error;
     const logFile = build.status === "failed" ? failedLogs?.get(build.drv) : undefined;
     if (logFile) view.logFile = logFile;
+    const drvContext =
+      build.status === "failed" && !state.hasMismatch(build)
+        ? failedDrvContexts?.get(build.drv)
+        : undefined;
+    if (drvContext) view.drvContext = drvContext;
     if (build.status === "running" || (dryRunDone && build.status === "planned")) {
       view.estimateMs = estimate(build.name, build.host);
     }

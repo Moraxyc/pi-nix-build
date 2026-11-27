@@ -3,6 +3,7 @@ import {
   type BuildDetails,
   type BuildView,
   dryRunEstimate,
+  isMismatchedBuild,
   type RunStatus,
   snapshot,
   sumEstimates,
@@ -12,6 +13,7 @@ import { formatDuration, formatPeer, singleLine } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { diagnoseErrors, formatHintLine } from "./nix/diagnostics.ts";
+import { type DrvContext, formatDrvContextText, readDrvContexts } from "./nix/drv.ts";
 import { DependencyGraph } from "./nix/graph.ts";
 import { type BuildState, extraErrors } from "./nix/state.ts";
 import { formatProfileText } from "./profile.ts";
@@ -98,6 +100,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
     status: RunStatus,
     extra: Partial<BuildDetails> = {},
     failedLogs?: ReadonlyMap<string, string>,
+    failedDrvContexts?: ReadonlyMap<string, DrvContext>,
     plainStderr?: readonly string[],
   ) =>
     snapshot(
@@ -114,6 +117,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         inputsOf: (drv) => graph.inputsOf(drv),
         estimate: (name, host) => durations.estimate(name, host, Boolean(command.dryRun)),
         failedLogs,
+        failedDrvContexts,
         plainStderr,
       },
     );
@@ -160,10 +164,13 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
           .map((build) => build.drv);
         if (executed.length > 0) await graph.load(executed);
       }
-      const failedLogs =
+      const [failedLogs, failedDrvContexts] =
         status === "failed"
-          ? await saveFailedLogs(run.state, run.logFile).catch(() => undefined)
-          : undefined;
+          ? await Promise.all([
+              saveFailedLogs(run.state, run.logFile).catch(() => undefined),
+              loadFailedDrvContexts(run.state).catch(() => undefined),
+            ])
+          : [undefined, undefined];
       latest = current(
         status,
         {
@@ -171,6 +178,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
           outputs: command.parseOutputs(exit.stdout),
         },
         failedLogs,
+        failedDrvContexts,
         exit.plainStderr,
       );
       return {
@@ -226,6 +234,17 @@ export async function saveFailedLogs(
   return saved;
 }
 
+/**
+ * Reads failed derivations via `nix derivation show` to extract generic derivation context
+ * (system, non-default builder, inputs, patches, and active script). Skips pure hash mismatches.
+ */
+export async function loadFailedDrvContexts(state: BuildState): Promise<Map<string, DrvContext>> {
+  const failed = [...state.builds.values()].filter(
+    (build) => build.status === "failed" && !state.hasMismatch(build),
+  );
+  return readDrvContexts(failed.map((build) => ({ drv: build.drv, phase: build.phase })));
+}
+
 export function summarize(details: BuildDetails, plainStderr: string[]): string {
   if (details.dryRun && details.status === "succeeded") {
     return summarizeDryRun(details);
@@ -261,16 +280,19 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
       `  got:       ${mismatch.got}`,
     );
   }
-  const mismatched = new Set(details.hashMismatches.map((m) => m.drv));
   const failed = details.builds.filter((build) => build.status === "failed");
   for (const build of failed) {
+    const mismatched = isMismatchedBuild(build, details.hashMismatches);
     const where = [
       build.phase && `in ${build.phase}`,
       build.host && `on ${formatPeer(build.host)}`,
     ];
     lines.push("", `Failed: ${build.drv} ${where.filter(Boolean).join(" ")}`.trimEnd());
     if (build.log?.length) lines.push(`Last ${build.log.length} log lines:`, ...build.log);
-    else if (build.error && !mismatched.has(build.drv)) lines.push(build.error);
+    else if (build.error && !mismatched) lines.push(build.error);
+    if (build.drvContext && !mismatched) {
+      lines.push(...formatDrvContextText(build.drvContext));
+    }
     if (build.logFile) lines.push(`Full build log: ${build.logFile}`);
   }
   const hasBuildFailures = failed.length > 0 || details.hashMismatches.length > 0;

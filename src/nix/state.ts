@@ -329,7 +329,7 @@ export class BuildState {
     if (!this.errors.includes(msg)) this.errors.push(msg);
   }
 
-  private hasMismatch(build: Build): boolean {
+  hasMismatch(build: Build): boolean {
     return this.hashMismatches.some(
       (m) => (this.resolved.get(m.drv) ?? this.builds.get(m.drv)) === build,
     );
