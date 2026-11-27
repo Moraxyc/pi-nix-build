@@ -178,7 +178,7 @@ function searchLines(
   };
 }
 
-function boundOutput(lines: readonly string[], side: "head" | "tail") {
+export function boundOutput(lines: readonly string[], side: "head" | "tail") {
   const fn = side === "head" ? truncateHead : truncateTail;
   return fn(lines.join("\n"), {
     maxBytes: DEFAULT_MAX_BYTES,
@@ -186,7 +186,7 @@ function boundOutput(lines: readonly string[], side: "head" | "tail") {
   });
 }
 
-function buildMatcher(pattern: string, regex?: boolean, ignoreCase?: boolean) {
+export function buildMatcher(pattern: string, regex?: boolean, ignoreCase?: boolean) {
   if (regex) {
     const flags = ignoreCase ? "i" : "";
     const compiled = new RegExp(pattern, flags);

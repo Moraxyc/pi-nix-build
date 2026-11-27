@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { ICONS } from "../icons.ts";
+import { jobDrv } from "../jobs/drv.ts";
 import { DEFAULT_LOG_LIMIT, jobLog, MAX_CONTEXT_LINES, MAX_LOG_LIMIT } from "../jobs/logs.ts";
 import {
   JOB_MESSAGE,
@@ -19,53 +20,48 @@ const DEFAULT_WAIT_SECONDS = 300;
 const STOP_WAIT_MS = 15_000;
 
 const parameters = Type.Object({
-  action: StringEnum(["list", "status", "log", "wait", "update", "stop"] as const, {
+  action: StringEnum(["list", "status", "log", "drv", "wait", "update", "stop"] as const, {
     description:
-      "list: all jobs. status: progress, running builds and watches of a job. log: read or search a derivation's plain-text build log (while running or after it ends). wait: block until the job ends or timeoutSeconds pass. update: change watches or exit notifications. stop: interrupt the build.",
+      "list | status | log (build log) | drv (.drv context/env) | wait | update (watches/notify) | stop.",
   }),
-  job: Type.Optional(
-    Type.String({ description: 'Job id, e.g. "nix-1". Required except for list.' }),
-  ),
+  job: Type.Optional(Type.String({ description: 'Job id, e.g. "nix-1" (required except list).' })),
   drv: Type.Optional(
     Type.String({
-      description:
-        "log: derivation store path, name, or unique substring. Optional when the job has only one derivation, one failed derivation, or one running derivation.",
+      description: "log/drv: drv path, name, or unique substring (optional if unambiguous).",
     }),
   ),
   pattern: Type.Optional(
     Type.String({
-      description: "log: filter lines matching this text (literal substring unless regex is true).",
+      description: "log/drv: filter log lines or env attrs (literal unless regex).",
     }),
   ),
-  regex: Type.Optional(
-    Type.Boolean({ description: "log: treat pattern as a regular expression." }),
-  ),
-  ignoreCase: Type.Optional(
-    Type.Boolean({ description: "log: case-insensitive pattern matching." }),
-  ),
+  regex: Type.Optional(Type.Boolean({ description: "log/drv: regex pattern." })),
+  ignoreCase: Type.Optional(Type.Boolean({ description: "log/drv: case-insensitive." })),
   context: Type.Optional(
     Type.Integer({
       minimum: 0,
       maximum: MAX_CONTEXT_LINES,
-      description: "log: lines of context before and after each pattern match (default 0).",
+      description: "log: context lines around matches (default 0).",
     }),
   ),
   offset: Type.Optional(
     Type.Integer({
       minimum: 1,
-      description:
-        "log: 1-based start line number. Without pattern, omitting offset returns the last `limit` lines.",
+      description: "log: 1-based start line (omit for tail).",
     }),
   ),
   limit: Type.Optional(
     Type.Integer({
       minimum: 1,
       maximum: MAX_LOG_LIMIT,
-      description: `log: maximum lines (or matches when pattern is set) to return. Default ${DEFAULT_LOG_LIMIT}.`,
+      description: `log: max lines/matches (default ${DEFAULT_LOG_LIMIT}).`,
     }),
   ),
   timeoutSeconds: Type.Optional(
-    Type.Number({ exclusiveMinimum: 0, description: `wait: default ${DEFAULT_WAIT_SECONDS}.` }),
+    Type.Number({
+      exclusiveMinimum: 0,
+      description: `wait: timeout seconds (default ${DEFAULT_WAIT_SECONDS}).`,
+    }),
   ),
   notify: Type.Optional(
     Type.Object(exitNotifySchema, { description: "update: exit notifications." }),
@@ -77,11 +73,11 @@ const parameters = Type.Object({
         items: Type.Optional(watchListSchema),
         indexes: Type.Optional(
           Type.Array(Type.Integer({ minimum: 0 }), {
-            description: "remove: watch indexes as shown by status.",
+            description: "remove: watch indexes from status.",
           }),
         ),
       },
-      { description: "update: change the watches." },
+      { description: "update: modify watches." },
     ),
   ),
 });
@@ -91,8 +87,8 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
     name: "nix_jobs",
     label: "Nix Jobs",
     description:
-      "Inspect and control background Nix runs started with nix_build or nix_check (background: true). Watches and exit notifications report events on their own; use status for an occasional look, log to read or search a derivation's clean build log by pattern or line range, and wait only when the next step needs the result.",
-    promptSnippet: "List, inspect, query logs of, wait for, re-watch or stop background Nix runs",
+      "Inspect and control background nix_build/nix_check jobs. Use status occasionally, log to read/search build logs, drv to inspect local .drv context or search env, and wait only when blocked on the result.",
+    promptSnippet: "Manage background Nix jobs (status, logs, .drv context, watches, wait, stop)",
     parameters,
 
     async execute(_toolCallId, params, signal) {
@@ -123,6 +119,15 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
               context: params.context,
               offset: params.offset,
               limit: params.limit,
+            }),
+          );
+        case "drv":
+          return text(
+            await jobDrv(job, {
+              drv: params.drv,
+              pattern: params.pattern,
+              regex: params.regex,
+              ignoreCase: params.ignoreCase,
             }),
           );
         case "wait": {
