@@ -18,6 +18,7 @@
     ├── build-run.ts           # 构建生命周期、快照节流与失败摘要
     ├── runner.ts              # Nix 子进程管理、完整 stderr 日志与信号处理
     ├── details.ts             # 可序列化的工具结果快照
+    ├── profile.ts             # 构建耗时剖析、关键路径 DAG 分析与构建机分布统计
     ├── render.ts              # 状态行、进度条、依赖树与完成态渲染
     ├── tree.ts                # 依赖树构建器
     ├── widget.ts              # 编辑器上方进度组件与鼠标命中检测

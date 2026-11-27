@@ -18,6 +18,7 @@ English | [简体中文](../zh/development.md)
     ├── build-run.ts           # Build lifecycle, snapshot throttling, failure summary
     ├── runner.ts              # Nix subprocess runner, full stderr log, signal handling
     ├── details.ts             # Serializable tool-result snapshot
+    ├── profile.ts             # Timing profile, critical path DAG analysis, builder stats
     ├── render.ts              # Status line, progress bar, dependency tree, finished view
     ├── tree.ts                # Dependency tree builder
     ├── widget.ts              # Above-editor progress widget and mouse hit-testing

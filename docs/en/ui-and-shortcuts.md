@@ -55,7 +55,17 @@ Two separate controls govern widget density:
 
 - **Layout**: Side-by-side split at `>= 100` columns (dependency tree on the left, log pane on the right); stacked vertically on narrower terminals.
 - **Tree pane**: Lists all derivations in the build (including completed ones) and active transfers. Defaults selection to the first running derivation, then the first failed derivation, then the first entry.
-- **Log pane**: Shows derivation name, status, phase, remote host, and up to 200 recent log lines held in memory (or Nix's error text if no build log exists). Scrolling upward locks the viewport and shows `↓ N newer lines` as new output arrives.
+- **Log pane**: Shows derivation name, status, phase, remote host, and recent log lines held in memory (or Nix's error text if no build log exists). Scrolling upward locks the viewport and shows `↓ N newer lines` as new output arrives.
+- **Summary view** (`Tab`): Displays wall time, cumulative build time and parallelism, top 10 slowest derivations (`[CP]` marks critical-path nodes), the longest duration-weighted critical path in the `.drv` dependency graph, and task/time distribution across `local` and each remote builder.
+- **Help view** (`?`): Shows the full keyboard and mouse reference; press `?` or `Esc` to return.
+
+## Build Timing Profile
+
+When a non-dry-run build executes at least one derivation, the finished tool result displays a timing profile:
+
+- **Collapsed**: Compact summary lines showing the top 3 slowest derivations, the critical path chain with its share of wall-clock time, and per-builder task counts and durations (`local` and each remote builder).
+- **Expanded**: Overview metrics (wall time, cumulative build time, parallelism, critical path), top 5 slowest derivations, full step-by-step critical path chain, and per-builder breakdown.
+- **Model summary**: The text returned to pi also includes the top 5 slowest derivations, critical path chain, and builder distribution.
 
 ## Keyboard and Mouse Controls
 
@@ -73,8 +83,10 @@ Two separate controls govern widget density:
 | `↑` / `↓` or `k` / `j` | Move selection in the dependency tree.                                         |
 | `←` / `→` or `h` / `l` | Scroll the tree sideways. Moving the selection also does, to keep it in view.  |
 | `PgUp` / `PgDn`        | Scroll the log pane by one page.                                               |
-| `g` / `Home`           | Jump to the top of the log.                                                    |
-| `G` / `End`            | Jump to the bottom of the log and resume auto-follow.                          |
+| `g` / `Home`           | Jump to the top of the log or summary page.                                    |
+| `G` / `End`            | Jump to the bottom of the log (resumes auto-follow) or summary page.           |
+| `Tab`                  | Toggle between the Tree/Log view and the Summary (timing profile) view.        |
+| `?`                    | Open the keyboard and mouse help page; press `?` or `Esc` to return.           |
 | `o`                    | Open the selected build's whole log read-only in `$PAGER` (`less`).            |
 | `e`                    | Open the selected build's whole log read-only in `$VISUAL` / `$EDITOR` (`vi`). |
 | `Esc` / `q`            | Close the detail view.                                                         |
@@ -86,7 +98,7 @@ To stay light, memory holds only the last 80 lines of each build, and only for f
 pi delivers mouse events to components only in fullscreen TUI mode:
 
 - **Widget**: Left-click the command title to expand or fold that build; left-click `⤢ details` in the footer to open the detail view.
-- **Detail view**: Left-click a derivation row to view its log; scroll the wheel over the tree pane to change selection or over the log pane to scroll logs; hold `Shift` over the tree pane to scroll it sideways.
+- **Detail view**: Left-click a derivation row to view its log; scroll the wheel over the tree pane to change selection, over the log pane to scroll logs, or in Summary view to scroll the summary; hold `Shift` over the tree pane to scroll it sideways.
 
 ## Duration History and Estimates
 
