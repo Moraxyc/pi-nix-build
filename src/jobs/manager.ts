@@ -14,6 +14,7 @@ import { AdoptedProcess } from "./processes.ts";
 import {
   type Attention,
   describeWatch,
+  type Fired,
   progressLine,
   runningLines,
   type Watch,
@@ -33,9 +34,19 @@ export interface JobNotify {
 export interface JobMessageDetails {
   job: string;
   command: string;
-  /** `finished` or the event of the watch that fired. */
+  /** `finished` and the events of the watches that fired, comma-separated. */
   event: string;
   isError?: boolean;
+}
+
+/** One event of a job message. */
+interface Section {
+  event: string;
+  text: string;
+}
+
+function section(fired: Fired): Section {
+  return { event: fired.watch.event, text: fired.text };
 }
 
 export interface Job {
@@ -193,55 +204,52 @@ export class JobManager {
 
   private tick(job: Job, details: BuildDetails, ui: ExtensionUIContext | undefined): void {
     if (ui) this.progress.update(ui, job.id, job.run.live);
-    void this.fireWatches(job, details, false);
+    const fired = this.fireWatches(job, details, false);
+    // Events of one tick go out together, so they wake the agent at most once.
+    if (fired.length === 0) return;
+    const attention = fired.some((event) => event.attention === "turn") ? "turn" : "context";
+    void this.deliver(job, attention, fired.map(section));
   }
 
-  private async fireWatches(job: Job, details: BuildDetails, final: boolean): Promise<void> {
-    const fired = job.watches.tick({
-      state: job.run.live.state,
-      details,
-      now: Date.now(),
-      lastActivityAt: job.run.lastActivityAt(),
-      final,
-    });
-    // Events of one tick go out together, so they wake the agent at most once.
-    const shown = fired.filter((event) => event.attention !== "ignore");
-    if (shown.length === 0) return;
-    let attention: Attention = shown.some((event) => event.attention === "turn")
-      ? "turn"
-      : "context";
-    // A waiting call returns the result itself.
-    if (final && job.waiters > 0) attention = "context";
-    const events = [...new Set(shown.map((event) => event.watch.event))].join(", ");
-    const text = shown
-      .map((event) => (shown.length > 1 ? `[${event.watch.event}] ${event.text}` : event.text))
-      .join("\n\n");
-    await this.deliver(job, attention, events, text);
+  private fireWatches(job: Job, details: BuildDetails, final: boolean): Fired[] {
+    return job.watches
+      .tick({
+        state: job.run.live.state,
+        details,
+        now: Date.now(),
+        lastActivityAt: job.run.lastActivityAt(),
+        final,
+      })
+      .filter((event) => event.attention !== "ignore");
   }
 
   private async finish(job: Job, result: FinishedBuild): Promise<FinishedBuild> {
     this.progress.remove(job.id);
     const { status } = result.details;
-    // Nix often exits within one tick of the last build ending; report its events before the end.
-    if (status !== "cancelled") await this.fireWatches(job, result.details, true);
+    // Nix often exits within one tick of the last build ending. Those events go out in the
+    // finished message: pi delivers separate turn and context messages out of order.
+    const fired = status === "cancelled" ? [] : this.fireWatches(job, result.details, true);
     let attention: Attention =
       status === "succeeded"
         ? job.onSuccess
         : job.onFailure === "ignore"
           ? "context"
           : job.onFailure;
+    if (fired.some((event) => event.attention === "turn")) attention = "turn";
+    else if (fired.length > 0 && attention === "ignore") attention = "context";
+    const sections = [...fired.map(section), { event: "finished", text: result.text }];
     // A stop was asked for, or a waiting call returns the result: nothing to wake for.
     if (status === "cancelled" || job.waiters > 0) attention = "context";
     if (job.adopted) {
       // pi-processes wakes the agent once the view exits; the summary must already be there.
       if (attention !== "ignore") attention = "context";
-      await this.deliver(job, attention, "finished", result.text, result.isError);
+      await this.deliver(job, attention, sections, result.isError);
       for (const output of result.details.outputs) job.adopted.output(output);
       if (result.isError) job.adopted.log(result.text);
       if (status === "cancelled") job.adopted.exit(null, "SIGINT");
       else job.adopted.exit(status === "succeeded" ? 0 : 1);
     } else {
-      await this.deliver(job, attention, "finished", result.text, result.isError);
+      await this.deliver(job, attention, sections, result.isError);
     }
     job.result = result;
     return result;
@@ -250,12 +258,15 @@ export class JobManager {
   private async deliver(
     job: Job,
     attention: Attention,
-    event: string,
-    text: string,
+    sections: readonly Section[],
     isError = false,
   ): Promise<void> {
     if (attention === "ignore") return;
     const command = job.run.live.command;
+    const event = [...new Set(sections.map((s) => s.event))].join(", ");
+    const text = sections
+      .map((s) => (sections.length > 1 ? `[${s.event}] ${s.text}` : s.text))
+      .join("\n\n");
     const details: JobMessageDetails = { job: job.id, command, event, isError };
     await this.pi.sendMessage(
       {
