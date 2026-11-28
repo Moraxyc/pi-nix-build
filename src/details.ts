@@ -1,5 +1,6 @@
 import { diagnoseErrors, type ErrorHint } from "./nix/diagnostics.ts";
 import type { DrvContext } from "./nix/drv.ts";
+import type { RebuildFrontier } from "./nix/frontier.ts";
 import type { BuildState, HashMismatch, Status, TransferKind } from "./nix/state.ts";
 import { storeName } from "./nix/store.ts";
 import { type BuildProfile, computeProfile } from "./profile.ts";
@@ -71,6 +72,8 @@ export interface BuildDetails {
   hashMismatches: HashMismatch[];
   /** Structured root-cause hints for known high-frequency Nix errors. */
   hints?: ErrorHint[];
+  /** Rebuild frontier and session `.drv` causal diffs for dry-run previews. */
+  frontier?: RebuildFrontier;
   /** Timing profile, critical path, and builder distribution once the run ends. */
   profile?: BuildProfile;
   logFile: string;
@@ -142,12 +145,14 @@ export function snapshot(
     estimate = () => undefined,
     failedLogs,
     failedDrvContexts,
+    frontier,
     plainStderr,
   }: {
     inputsOf?: (drv: string) => readonly string[] | undefined;
     estimate?: (name: string, host: string | undefined) => number | undefined;
     failedLogs?: ReadonlyMap<string, string>;
     failedDrvContexts?: ReadonlyMap<string, DrvContext>;
+    frontier?: RebuildFrontier;
     plainStderr?: readonly string[];
   } = {},
 ): BuildDetails {
@@ -236,6 +241,7 @@ export function snapshot(
     errors: [...state.errors],
     hashMismatches: [...state.hashMismatches],
     ...(hints.length > 0 ? { hints } : {}),
+    ...(frontier ? { frontier } : {}),
     ...(profile ? { profile } : {}),
   };
 }

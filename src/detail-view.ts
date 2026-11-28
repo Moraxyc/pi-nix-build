@@ -11,9 +11,17 @@ import {
 } from "@earendil-works/pi-tui";
 import { formatPeer } from "./format.ts";
 import type { LiveRun } from "./live.ts";
+import { hasNotableFrontier } from "./nix/frontier.ts";
 import type { Build } from "./nix/state.ts";
 import { computeProfile, DEFAULT_TOP_N } from "./profile.ts";
-import { finishedLine, renderProfile, statusLine, transferRow, treeRow } from "./render.ts";
+import {
+  finishedLine,
+  renderFrontier,
+  renderProfile,
+  statusLine,
+  transferRow,
+  treeRow,
+} from "./render.ts";
 import { buildLogPath, readBuildLog, writePlainLog } from "./runner.ts";
 import { dependencyForest, type TreeNode } from "./tree.ts";
 
@@ -296,6 +304,12 @@ export class DetailView implements Component {
     width: number,
   ): string[] {
     if (details.dryRun) {
+      if (details.frontier && hasNotableFrontier(details.frontier)) {
+        return [
+          "",
+          ...renderFrontier(details.frontier, { expanded: true, indent: " " }, this.theme),
+        ];
+      }
       return ["", ` ${this.theme.fg("dim", "No timing profile for dry-run previews.")}`];
     }
     const running = details.status === "running";

@@ -9,9 +9,11 @@ import {
   type TransferView,
   total,
 } from "./details.ts";
-import { formatBytes, formatDuration, formatPeer, formatTiming } from "./format.ts";
+import { formatBytes, formatDuration, formatPeer, formatTiming, plural } from "./format.ts";
 import { ICONS } from "./icons.ts";
 import type { DrvContext } from "./nix/drv.ts";
+import type { DrvDiff } from "./nix/drv-diff.ts";
+import { hasNotableFrontier, type RebuildFrontier } from "./nix/frontier.ts";
 import { extraErrors, STDENV_PHASES, type Status } from "./nix/state.ts";
 import { pathInStore } from "./nix/store.ts";
 import { type BuildProfile, builderLabel, type ProfiledBuild, sharePercent } from "./profile.ts";
@@ -25,6 +27,10 @@ const COLLAPSED_FAILED_LOG = 8;
 const COLLAPSED_OUTPUTS = 3;
 const COLLAPSED_DRY_RUN_LINES = 8;
 const EXPANDED_DRY_RUN_LINES = 60;
+const COLLAPSED_FRONTIER_NODES = 3;
+const EXPANDED_FRONTIER_NODES = 10;
+const COLLAPSED_DIFF_CHANGES = 2;
+const PLAIN_FRONTIER_NODES = 10;
 const COLLAPSED_PROFILE_TOP = 3;
 const EXPANDED_PROFILE_TOP = 5;
 const COLLAPSED_CP_STEPS = 4;
@@ -230,6 +236,12 @@ function renderFinished(
 ): string[] {
   const lines = [finishedLine(details, theme)];
 
+  if (details.dryRun && details.status === "succeeded") {
+    if (details.frontier && hasNotableFrontier(details.frontier)) {
+      lines.push(...renderFrontier(details.frontier, { expanded, indent: "  " }, theme));
+    }
+  }
+
   if (details.dryRun && details.status === "succeeded" && details.tree?.length) {
     const byDrv = new Map(details.builds.map((build) => [build.drv, build]));
     const pruned = pruneForest(
@@ -433,6 +445,149 @@ function renderDrvContext(context: DrvContext, theme: Theme): string[] {
       lines.push(`        ${theme.fg("toolOutput", line)}`);
     }
     if (context.script.truncated) lines.push(`        ${theme.fg("dim", "… (truncated)")}`);
+  }
+  return lines;
+}
+
+function pushDiffChangeLines(
+  lines: string[],
+  diff: DrvDiff,
+  maxChanges: number,
+  formatItem: (summary: string) => string,
+  formatMore: (hidden: number) => string,
+): void {
+  const shownChanges = diff.changes.slice(0, maxChanges);
+  for (const change of shownChanges) lines.push(formatItem(change.summary));
+  const hidden = diff.changes.length - shownChanges.length + (diff.omitted ?? 0);
+  if (hidden > 0) lines.push(formatMore(hidden));
+}
+
+/** Formats rebuild frontier nodes and session `.drv` causal diffs as plain-text summary lines. */
+export function formatFrontierText(
+  frontier: RebuildFrontier | undefined,
+  maxShown = PLAIN_FRONTIER_NODES,
+): string[] {
+  if (!frontier || !hasNotableFrontier(frontier)) return [];
+  const lines: string[] = [];
+
+  if (frontier.cascadedCount === 0) {
+    const diffed = frontier.nodes.filter((node) => node.diff !== undefined);
+    const shown = diffed.slice(0, maxShown);
+    lines.push("Drv diff vs previous run:");
+    for (const node of shown) {
+      const diff = node.diff;
+      if (!diff) continue;
+      lines.push(`- ${node.name} (vs previous ${diff.previousName}):`);
+      pushDiffChangeLines(
+        lines,
+        diff,
+        Number.POSITIVE_INFINITY,
+        (summary) => `  • ${summary}`,
+        (hidden) => `  • … (+${plural(hidden, "more change")})`,
+      );
+    }
+    if (diffed.length > shown.length) {
+      lines.push(`… and ${plural(diffed.length - shown.length, "more changed derivation")}`);
+    }
+    return lines;
+  }
+
+  const partial = frontier.incomplete ? "; partial local graph" : "";
+  const othersWord = frontier.cascadedCount === 1 ? "other" : "others";
+  lines.push(
+    `Rebuild frontier (${plural(frontier.frontierCount, "root derivation")}; ${frontier.cascadedCount} ${othersWord} cascaded${partial}):`,
+  );
+  const shown = frontier.nodes.slice(0, maxShown);
+  for (const node of shown) {
+    const meta: string[] = [];
+    if (node.cascadedCount > 0) meta.push(`cascades ${plural(node.cascadedCount, "derivation")}`);
+    if (node.estimateMs !== undefined) meta.push(`~${formatDuration(node.estimateMs)}`);
+    lines.push(`- ${node.name}${meta.length > 0 ? ` (${meta.join(", ")})` : ""}`);
+    if (node.diff) {
+      lines.push(`  diff vs previous ${node.diff.previousName}:`);
+      pushDiffChangeLines(
+        lines,
+        node.diff,
+        Number.POSITIVE_INFINITY,
+        (summary) => `    • ${summary}`,
+        (hidden) => `    • … (+${plural(hidden, "more change")})`,
+      );
+    }
+  }
+  if (frontier.frontierCount > shown.length) {
+    lines.push(
+      `… and ${plural(frontier.frontierCount - shown.length, "more frontier derivation")}`,
+    );
+  }
+  return lines;
+}
+
+/** Renders rebuild frontier nodes and session `.drv` causal diffs for chat results and DetailView. */
+export function renderFrontier(
+  frontier: RebuildFrontier,
+  options: { expanded: boolean; indent?: string },
+  theme: Theme,
+): string[] {
+  if (!hasNotableFrontier(frontier)) return [];
+  const indent = options.indent ?? "  ";
+  const maxNodes = options.expanded ? EXPANDED_FRONTIER_NODES : COLLAPSED_FRONTIER_NODES;
+  const maxChanges = options.expanded ? Number.POSITIVE_INFINITY : COLLAPSED_DIFF_CHANGES;
+  const renderChange = (summary: string) =>
+    `${indent}    ${theme.fg("dim", "•")} ${theme.fg("toolOutput", summary)}`;
+  const renderMore = (hidden: number) =>
+    `${indent}    ${theme.fg("dim", `… +${plural(hidden, "more change")}`)}`;
+  const lines: string[] = [];
+
+  if (frontier.cascadedCount === 0) {
+    const diffed = frontier.nodes.filter((node) => node.diff !== undefined);
+    const shown = diffed.slice(0, maxNodes);
+    lines.push(
+      `${indent}${theme.fg("accent", "drv diff")} ${theme.fg("dim", "(vs previous run)")}`,
+    );
+    for (const node of shown) {
+      const diff = node.diff;
+      if (!diff) continue;
+      const prev =
+        diff.previousName !== node.name ? ` ${theme.fg("dim", `(was ${diff.previousName})`)}` : "";
+      lines.push(`${indent}  ${theme.bold(node.name)}${prev}`);
+      pushDiffChangeLines(lines, diff, maxChanges, renderChange, renderMore);
+    }
+    if (diffed.length > shown.length) {
+      lines.push(`${indent}  ${theme.fg("dim", `… ${diffed.length - shown.length} more changed`)}`);
+    }
+    return lines;
+  }
+
+  const partial = frontier.incomplete ? ", partial" : "";
+  lines.push(
+    `${indent}${theme.fg("warning", "frontier")} ${theme.fg("dim", `(${plural(frontier.frontierCount, "root")}, ${frontier.cascadedCount} cascaded${partial})`)}`,
+  );
+  const shown = frontier.nodes.slice(0, maxNodes);
+  for (const node of shown) {
+    const meta: (string | undefined)[] = [
+      node.cascadedCount > 0 ? theme.fg("dim", `cascades ${node.cascadedCount}`) : undefined,
+      node.estimateMs !== undefined
+        ? theme.fg("dim", `~${formatDuration(node.estimateMs)}`)
+        : undefined,
+    ];
+    lines.push(
+      withMeta(
+        `${indent}  ${theme.fg("warning", ICONS.waiting)} ${theme.bold(node.name)}`,
+        meta,
+        theme,
+      ),
+    );
+    if (node.diff) {
+      if (node.diff.previousName !== node.name) {
+        lines.push(`${indent}    ${theme.fg("muted", `diff vs ${node.diff.previousName}:`)}`);
+      }
+      pushDiffChangeLines(lines, node.diff, maxChanges, renderChange, renderMore);
+    }
+  }
+  if (frontier.frontierCount > shown.length) {
+    lines.push(
+      `${indent}  ${theme.fg("dim", `… ${frontier.frontierCount - shown.length} more frontier derivations`)}`,
+    );
   }
   return lines;
 }
