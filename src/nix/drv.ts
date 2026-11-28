@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { basename } from "node:path";
 import { promisify } from "node:util";
+import { dedupe, splitLines } from "../format.ts";
 import { shortStoreItem, storeName } from "./store.ts";
 
 const execFileAsync = promisify(execFile);
@@ -26,6 +27,8 @@ export interface ParsedDrv {
   args: string[];
   outputs: DrvOutput[];
   inputDrvs: string[];
+  /** Requested output names per `inputDrvs` key (sorted). */
+  inputDrvOutputs?: Record<string, string[]>;
   inputSrcs: string[];
   env: Record<string, string>;
   structuredAttrs?: Record<string, unknown>;
@@ -205,7 +208,7 @@ export function formatScriptExcerpt(
 }
 
 export function trimBlankEdgeLines(text: string): string {
-  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  const lines = splitLines(text);
   let start = 0;
   let end = lines.length;
   while (start < end && lines[start].trim() === "") start++;
@@ -276,7 +279,15 @@ function normalizeRawDrv(raw: unknown): ParsedDrv | undefined {
     : isPlainObject(raw.inputDrvs)
       ? raw.inputDrvs
       : undefined;
-  const inputDrvs = inputDrvsObj ? Object.keys(inputDrvsObj) : [];
+  const inputDrvs: string[] = [];
+  const inputDrvOutputs: Record<string, string[]> = {};
+  if (inputDrvsObj) {
+    for (const [drvKey, entry] of Object.entries(inputDrvsObj)) {
+      inputDrvs.push(drvKey);
+      const outs = extractInputDrvOutputs(entry);
+      if (outs.length > 0) inputDrvOutputs[drvKey] = outs;
+    }
+  }
   const inputSrcs = asStringArray(inputsObj?.srcs ?? raw.inputSrcs);
 
   return {
@@ -285,6 +296,7 @@ function normalizeRawDrv(raw: unknown): ParsedDrv | undefined {
     args: asStringArray(raw.args),
     outputs,
     inputDrvs,
+    ...(Object.keys(inputDrvOutputs).length > 0 ? { inputDrvOutputs } : {}),
     inputSrcs,
     env,
     ...(structuredAttrs ? { structuredAttrs } : {}),
@@ -333,16 +345,18 @@ function capItems(items: string[], max: number): string[] {
   return [...items.slice(0, max), `… (+${items.length - max} more)`];
 }
 
-function dedupe(items: readonly string[]): string[] {
-  return [...new Set(items)];
-}
-
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+function extractInputDrvOutputs(entry: unknown): string[] {
+  if (Array.isArray(entry)) return asStringArray(entry).sort();
+  if (isPlainObject(entry)) return asStringArray(entry.outputs).sort();
+  return [];
 }
 
 function asStringArray(value: unknown): string[] {

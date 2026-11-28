@@ -35,3 +35,15 @@ export function formatPeer(uri: string): string {
 export function singleLine(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
+
+export function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+export function splitLines(text: string): string[] {
+  return text.replace(/\r\n/g, "\n").split("\n");
+}
+
+export function dedupe<T>(items: readonly T[]): T[] {
+  return [...new Set(items)];
+}
