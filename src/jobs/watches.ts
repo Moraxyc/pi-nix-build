@@ -221,6 +221,8 @@ function check(
       );
       for (const build of builds) armed.reported.add(build.drv);
       if (builds.length === 0) return undefined;
+      // At the end the finished summary follows with the counts and each failed build's log.
+      if (final) return builds.map((build) => buildLine(build)).join("\n");
       const report = watch.event === "drv_failed" ? failedReport : builtReport;
       return [...builds.map((build) => report(build)), progressLine(details)].join("\n\n");
     }
@@ -279,9 +281,14 @@ function check(
   }
 }
 
-function failedReport(build: Build): string {
+function buildLine(build: Build): string {
+  if (build.status === "done") return builtReport(build);
   const where = [build.phase && `in ${build.phase}`, build.host && `on ${formatPeer(build.host)}`];
-  const lines = [`${build.drv} failed ${where.filter(Boolean).join(" ")}`.trimEnd()];
+  return `${build.drv} failed ${where.filter(Boolean).join(" ")}`.trimEnd();
+}
+
+function failedReport(build: Build): string {
+  const lines = [buildLine(build)];
   const log = build.log.slice(-FAILED_LOG_LINES);
   if (log.length > 0) lines.push(`Last ${log.length} log lines:`, ...log);
   else if (build.error) lines.push(build.error);
