@@ -238,7 +238,8 @@ export class JobManager {
       await this.deliver(job, attention, "finished", result.text, result.isError);
       for (const output of result.details.outputs) job.adopted.output(output);
       if (result.isError) job.adopted.log(result.text);
-      job.adopted.exit(status === "succeeded" ? 0 : 1);
+      if (status === "cancelled") job.adopted.exit(null, "SIGINT");
+      else job.adopted.exit(status === "succeeded" ? 0 : 1);
     } else {
       await this.deliver(job, attention, "finished", result.text, result.isError);
     }

@@ -18,7 +18,7 @@ class ChildView extends EventEmitter {
   readonly stdout = new PassThrough();
   readonly stderr = new PassThrough();
   exitCode: number | null = null;
-  readonly signalCode = null;
+  signalCode: NodeJS.Signals | null = null;
   readonly pid: number;
 
   constructor(pid: number) {
@@ -79,11 +79,13 @@ export class AdoptedProcess {
     this.events.emit(KILL, { id: this.id, signal: "SIGINT", timeoutMs, reply: () => {} });
   }
 
-  exit(code: number | null): void {
+  /** A signal makes pi-processes record the job as killed instead of failed. */
+  exit(code: number | null, signal: NodeJS.Signals | null = null): void {
     this.view.exitCode = code;
+    this.view.signalCode = signal;
     let open = 2;
     const closed = () => {
-      if (--open === 0) this.view.emit("close", code, null);
+      if (--open === 0) this.view.emit("close", code, signal);
     };
     for (const stream of [this.view.stdout, this.view.stderr]) {
       stream.once("end", closed);
