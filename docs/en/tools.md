@@ -102,7 +102,7 @@ Each job accepts up to **20** watches via `notify.watches` or `nix_jobs` `update
 
 | Event        | Fields                       | Trigger                                                                                                                                           |
 | ------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `drv_failed` | `match?`, `regex?`           | Once per failed derivation (useful with `--keep-going`), including the last 20 log lines. `match` filters by derivation name.                     |
+| `drv_failed` | `match?`, `regex?`           | Once per failed derivation (useful with `--keep-going`), with the last 20 log lines while the job runs. `match` filters by derivation name.       |
 | `drv_built`  | `match?`, `regex?`           | Once per completed derivation. `match` filters by derivation name.                                                                                |
 | `stalled`    | `minutes`                    | No Nix output or progress for `minutes`; resets automatically once activity resumes.                                                              |
 | `every`      | `minutes`                    | Periodic progress report every `minutes`.                                                                                                         |
@@ -118,7 +118,7 @@ Applies to `watch.on`, `notify.onSuccess`, and `notify.onFailure`:
 - `context`: Appends the `nix-job` message to conversation context without waking a turn.
 - `ignore`: Discards the event. For `onFailure`, `ignore` is downgraded to `context` so failures are always recorded.
 
-Watches triggered within the same check cycle are combined into one message; if any uses `turn`, the combined message uses `turn`.
+Watches triggered within the same check cycle are combined into one message; if any uses `turn`, the combined message uses `turn`. Watches that trigger as the job ends go into the finished message, one line each before the summary; if any of them uses `turn`, the finished message uses `turn`.
 
 ### `pi-processes` Integration
 
