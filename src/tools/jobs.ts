@@ -173,7 +173,9 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
       ? `${theme.fg(color, ICONS.job)} ${theme.bold(details.job)} ${theme.fg("muted", details.event)}  ${theme.fg("dim", details.command)}`
       : content;
     if (!details) return new Text(header, 0, 0);
-    const shown = expanded ? body : body.slice(0, 1);
+    // A finished message can carry the last watch events first; the summary says more.
+    const summary = body.find((line) => line.startsWith("[finished] ")) ?? body[0];
+    const shown = expanded ? body : summary === undefined ? [] : [summary];
     const more = body.length - shown.length;
     const lines = [header, ...shown.map((line) => `  ${line}`)];
     if (more > 0) lines.push(theme.fg("dim", `  … ${more} more lines`));
