@@ -13,6 +13,7 @@ import { singleLine } from "../format.ts";
 import { type JobManager, watchLines } from "../jobs/manager.ts";
 import { exitNotifySchema, watchListSchema } from "../jobs/watches.ts";
 import type { LiveSink } from "../live.ts";
+import type { SessionDrvTracker } from "../nix/drv-session.ts";
 import { renderBuild } from "../render.ts";
 
 export const backgroundParameters = {
@@ -43,6 +44,7 @@ export async function executeNixCommand(
   ctx: ExtensionContext,
   progress: LiveSink,
   jobs: JobManager,
+  sessionDrvs?: SessionDrvTracker,
 ): Promise<AgentToolResult<BuildDetails | undefined> & { isError?: boolean }> {
   if (params.notify && !params.background) {
     throw new Error("notify applies to background runs; pass background: true.");
@@ -66,6 +68,7 @@ export async function executeNixCommand(
   const run = await startCommand(command, {
     cwd: ctx.cwd,
     signal,
+    sessionDrvs,
     onTick: (details) => {
       if (ctx.hasUI) progress.update(ctx.ui, toolCallId, run.live);
       onUpdate?.({ content: [{ type: "text", text: progressText(details) }], details });

@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerBashHook } from "./hooks/bash.ts";
 import { JobManager } from "./jobs/manager.ts";
+import { SessionDrvTracker } from "./nix/drv-session.ts";
 import { registerBuildTool } from "./tools/build.ts";
 import { registerCheckTool } from "./tools/check.ts";
 import { registerEvalTool } from "./tools/eval.ts";
@@ -9,9 +10,10 @@ import { DETAILS_KEY, ProgressWidget, TOGGLE_KEY } from "./widget.ts";
 
 export default function (pi: ExtensionAPI) {
   const widget = new ProgressWidget();
-  const jobs = new JobManager(pi, widget);
-  registerBuildTool(pi, widget, jobs);
-  registerCheckTool(pi, widget, jobs);
+  const sessionDrvs = new SessionDrvTracker();
+  const jobs = new JobManager(pi, widget, sessionDrvs);
+  registerBuildTool(pi, widget, jobs, sessionDrvs);
+  registerCheckTool(pi, widget, jobs, sessionDrvs);
   registerEvalTool(pi, widget);
   registerJobsTool(pi, jobs);
   registerBashHook(pi);
@@ -30,5 +32,6 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_shutdown", () => {
     jobs.stopAll();
     widget.clear();
+    sessionDrvs.clear();
   });
 }

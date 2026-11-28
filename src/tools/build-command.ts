@@ -18,7 +18,8 @@ export const buildParameters = Type.Object({
   outLink: Type.Optional(Type.String({ description: "Result symlink path (default: none)." })),
   dryRun: Type.Optional(
     Type.Boolean({
-      description: "Preview planned builds, deps, fetches, and estimated duration (`--dry-run`).",
+      description:
+        "Preview planned builds, rebuild frontier, session .drv diff, fetches, and estimated duration (`--dry-run`).",
     }),
   ),
 });
@@ -57,6 +58,7 @@ export function buildCommand(params: BuildParams): BuildCommand {
     shownArgs: [...installables, ...dryArgs, ...extra],
     dryRun,
     parseOutputs: parseBuildJson,
+    parseDrvPaths: parseBuildJsonDrvs,
   };
 }
 
@@ -65,6 +67,18 @@ function parseBuildJson(stdout: string): string[] {
   try {
     const results = JSON.parse(stdout) as { outputs?: Record<string, string> }[];
     return results.flatMap((result) => Object.values(result.outputs ?? {}));
+  } catch {
+    return [];
+  }
+}
+
+function parseBuildJsonDrvs(stdout: string): string[] {
+  try {
+    const results = JSON.parse(stdout) as { drvPath?: unknown }[];
+    if (!Array.isArray(results)) return [];
+    return results
+      .map((result) => result.drvPath)
+      .filter((drv): drv is string => typeof drv === "string" && drv.endsWith(".drv"));
   } catch {
     return [];
   }

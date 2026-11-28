@@ -1,5 +1,5 @@
 import { DEFAULT_MAX_BYTES, truncateHead, truncateTail } from "@earendil-works/pi-coding-agent";
-import { type BuildCommand, commandLabel, displayCommand } from "./command.ts";
+import { type BuildCommand, commandLabel, commandTargetKey, displayCommand } from "./command.ts";
 import {
   type BuildDetails,
   type BuildView,
@@ -10,14 +10,21 @@ import {
   sumEstimates,
   total,
 } from "./details.ts";
-import { formatDuration, formatPeer } from "./format.ts";
+import { formatDuration, formatPeer, plural } from "./format.ts";
 import { DurationHistory, type Sample } from "./history.ts";
 import type { LiveRun } from "./live.ts";
 import { diagnoseErrors, formatHintLine } from "./nix/diagnostics.ts";
 import { type DrvContext, formatDrvContextText, readDrvContexts } from "./nix/drv.ts";
-import { DependencyGraph } from "./nix/graph.ts";
+import type { SessionDrvTracker } from "./nix/drv-session.ts";
+import {
+  computeRebuildFrontier,
+  hasNotableFrontier,
+  type RebuildFrontier,
+} from "./nix/frontier.ts";
+import { buildDrvSubgraph, DependencyGraph, topLevelDrvs } from "./nix/graph.ts";
 import { type Build, type BuildState, extraErrors } from "./nix/state.ts";
 import { formatProfileText } from "./profile.ts";
+import { formatFrontierText } from "./render.ts";
 import { buildLogPath, readBuildLogs, runNix, writePlainLog } from "./runner.ts";
 import { pruneForest } from "./tree.ts";
 
@@ -51,6 +58,8 @@ export interface RunOptions {
   cwd: string;
   signal?: AbortSignal;
   detached?: boolean;
+  /** Session-scoped `.drv` baseline tracker used for causal dry-run diffs. */
+  sessionDrvs?: SessionDrvTracker;
   /** Called with every builder log line as it arrives. */
   onLog?: (build: Build, line: string) => void;
   /** Called with each new snapshot while the build runs. */
@@ -84,6 +93,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
     extra: Partial<BuildDetails> = {},
     failedLogs?: ReadonlyMap<string, string>,
     failedDrvContexts?: ReadonlyMap<string, DrvContext>,
+    frontier?: RebuildFrontier,
     plainStderr?: readonly string[],
   ) =>
     snapshot(
@@ -101,6 +111,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         estimate: (name, host) => durations.estimate(name, host, Boolean(command.dryRun)),
         failedLogs,
         failedDrvContexts,
+        frontier,
         plainStderr,
       },
     );
@@ -137,15 +148,53 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         : exit.code === 0
           ? "succeeded"
           : "failed";
+      const targetKey = commandTargetKey(options.cwd, command);
+      const parsedDrvs = command.parseDrvPaths?.(exit.stdout) ?? [];
+      const allDrvs = [...run.state.builds.keys()];
+      let frontier: RebuildFrontier | undefined;
+      let targetDrvs: string[] | undefined;
       if (command.dryRun) {
-        if (status === "succeeded" && run.state.builds.size > 0) {
-          await graph.load(run.state.builds.keys());
+        if (status === "succeeded" && allDrvs.length > 0) {
+          await graph.load(allDrvs);
+          const plannedDrvs = [...run.state.builds.values()]
+            .filter((build) => build.status === "planned")
+            .map((build) => build.drv);
+          const inputsOf = (drv: string) => graph.inputsOf(drv);
+          const plannedGraph = buildDrvSubgraph(plannedDrvs, inputsOf);
+          const computed = computeRebuildFrontier(plannedDrvs, inputsOf, {
+            subgraph: plannedGraph,
+            estimateOf: (drv) => {
+              const build = run.state.builds.get(drv);
+              return build ? durations.estimate(build.name, build.host, true) : undefined;
+            },
+          });
+          const rootPlannedDrvs = topLevelDrvs(plannedDrvs, inputsOf, plannedGraph);
+          targetDrvs = parsedDrvs.length > 0 ? parsedDrvs : rootPlannedDrvs;
+          const enriched =
+            computed && options.sessionDrvs
+              ? await options.sessionDrvs
+                  .enrichFrontierDiffs(computed, {
+                    targetKey,
+                    targetDrvs,
+                    plannedDrvs,
+                    rootPlannedDrvs,
+                  })
+                  .catch(() => computed)
+              : computed;
+          if (hasNotableFrontier(enriched)) frontier = enriched;
+        } else if (status === "succeeded" && parsedDrvs.length > 0) {
+          targetDrvs = parsedDrvs;
         }
       } else {
         const executed = [...run.state.builds.values()]
           .filter((build) => build.startedAt !== undefined)
           .map((build) => build.drv);
         if (executed.length > 0) await graph.load(executed);
+        targetDrvs =
+          parsedDrvs.length > 0 ? parsedDrvs : topLevelDrvs(allDrvs, (drv) => graph.inputsOf(drv));
+      }
+      if (targetDrvs) {
+        options.sessionDrvs?.record({ targetKey, targetDrvs, allDrvs });
       }
       const [failedLogs, failedDrvContexts] =
         status === "failed"
@@ -162,6 +211,7 @@ export async function startCommand(command: BuildCommand, options: RunOptions): 
         },
         failedLogs,
         failedDrvContexts,
+        frontier,
         exit.plainStderr,
       );
       return {
@@ -301,10 +351,6 @@ export function summarize(details: BuildDetails, plainStderr: string[]): string 
   return truncateTail(lines.join("\n"), { maxBytes: DEFAULT_MAX_BYTES }).content;
 }
 
-function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
-}
-
 function summarizeDryRun(details: BuildDetails): string {
   const took = formatDuration((details.finishedAt ?? details.startedAt) - details.startedAt);
   const plannedBuilds = details.counts.builds.planned;
@@ -332,6 +378,8 @@ function summarizeDryRun(details: BuildDetails): string {
         ? `Estimated build time: ~${formatDuration(estimate.totalMs)} (based on historical medians for ${estimate.known}/${estimate.planned} derivations).`
         : `Estimated build time: unknown (no historical durations for ${plural(estimate.planned, "derivation")}).`,
     );
+    const frontierLines = formatFrontierText(details.frontier);
+    if (frontierLines.length > 0) lines.push(...frontierLines);
     const byDrv = new Map<string, BuildView>(details.builds.map((build) => [build.drv, build]));
     const pruned = pruneForest(details.tree ?? [], MAX_DRY_RUN_TREE_LINES);
     if (pruned.rows.length > 0) {

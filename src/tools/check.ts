@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import { TOOL_NAMES } from "../command.ts";
 import type { JobManager } from "../jobs/manager.ts";
 import type { LiveSink } from "../live.ts";
+import type { SessionDrvTracker } from "../nix/drv-session.ts";
 import { checkCommand, checkParameters } from "./check-command.ts";
 import {
   backgroundParameters,
@@ -16,7 +17,12 @@ const parameters = Type.Object({
   ...backgroundParameters,
 });
 
-export function registerCheckTool(pi: ExtensionAPI, progress: LiveSink, jobs: JobManager): void {
+export function registerCheckTool(
+  pi: ExtensionAPI,
+  progress: LiveSink,
+  jobs: JobManager,
+  sessionDrvs?: SessionDrvTracker,
+): void {
   pi.registerTool({
     name: TOOL_NAMES.check,
     label: "Nix Check",
@@ -39,6 +45,7 @@ export function registerCheckTool(pi: ExtensionAPI, progress: LiveSink, jobs: Jo
         ctx,
         progress,
         jobs,
+        sessionDrvs,
       );
     },
 

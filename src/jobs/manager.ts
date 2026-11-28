@@ -8,6 +8,7 @@ import type { BuildCommand } from "../command.ts";
 import type { BuildDetails } from "../details.ts";
 import { formatDuration, formatPeer } from "../format.ts";
 import type { LiveSink } from "../live.ts";
+import type { SessionDrvTracker } from "../nix/drv-session.ts";
 import type { Build, Status } from "../nix/state.ts";
 import { AdoptedProcess } from "./processes.ts";
 import {
@@ -59,12 +60,14 @@ export interface Job {
 export class JobManager {
   private readonly pi: ExtensionAPI;
   private readonly progress: LiveSink;
+  private readonly sessionDrvs?: SessionDrvTracker;
   private readonly jobs = new Map<string, Job>();
   private nextId = 1;
 
-  constructor(pi: ExtensionAPI, progress: LiveSink) {
+  constructor(pi: ExtensionAPI, progress: LiveSink, sessionDrvs?: SessionDrvTracker) {
     this.pi = pi;
     this.progress = progress;
+    this.sessionDrvs = sessionDrvs;
   }
 
   async start(command: BuildCommand, notify: JobNotify, ctx: ExtensionContext): Promise<Job> {
@@ -90,6 +93,7 @@ export class JobManager {
       cwd: ctx.cwd,
       signal: controller.signal,
       detached: true,
+      sessionDrvs: this.sessionDrvs,
       onLog: (build, line) => {
         watches.log(build, line);
         logTransitions([build]);
