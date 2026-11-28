@@ -193,28 +193,37 @@ export class JobManager {
 
   private tick(job: Job, details: BuildDetails, ui: ExtensionUIContext | undefined): void {
     if (ui) this.progress.update(ui, job.id, job.run.live);
-    const { state } = job.run.live;
-    const now = Date.now();
+    void this.fireWatches(job, details, false);
+  }
+
+  private async fireWatches(job: Job, details: BuildDetails, final: boolean): Promise<void> {
     const fired = job.watches.tick({
-      state,
+      state: job.run.live.state,
       details,
-      now,
+      now: Date.now(),
       lastActivityAt: job.run.lastActivityAt(),
+      final,
     });
     // Events of one tick go out together, so they wake the agent at most once.
     const shown = fired.filter((event) => event.attention !== "ignore");
     if (shown.length === 0) return;
-    const attention = shown.some((event) => event.attention === "turn") ? "turn" : "context";
+    let attention: Attention = shown.some((event) => event.attention === "turn")
+      ? "turn"
+      : "context";
+    // A waiting call returns the result itself.
+    if (final && job.waiters > 0) attention = "context";
     const events = [...new Set(shown.map((event) => event.watch.event))].join(", ");
     const text = shown
       .map((event) => (shown.length > 1 ? `[${event.watch.event}] ${event.text}` : event.text))
       .join("\n\n");
-    void this.deliver(job, attention, events, text);
+    await this.deliver(job, attention, events, text);
   }
 
   private async finish(job: Job, result: FinishedBuild): Promise<FinishedBuild> {
     this.progress.remove(job.id);
     const { status } = result.details;
+    // Nix often exits within one tick of the last build ending; report its events before the end.
+    if (status !== "cancelled") await this.fireWatches(job, result.details, true);
     let attention: Attention =
       status === "succeeded"
         ? job.onSuccess

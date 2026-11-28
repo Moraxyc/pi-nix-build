@@ -75,6 +75,8 @@ export interface TickInput {
   details: BuildDetails;
   now: number;
   lastActivityAt: number;
+  /** The job has ended: report what is left, but no timed event. */
+  final?: boolean;
 }
 
 interface Armed {
@@ -203,9 +205,12 @@ function arm(watch: Watch, now: number): Armed {
 
 function check(
   armed: Armed,
-  { state, details, now, lastActivityAt }: TickInput,
+  { state, details, now, lastActivityAt, final }: TickInput,
 ): string | undefined {
   const { watch } = armed;
+  if (final && (watch.event === "stalled" || watch.event === "every" || watch.event === "after")) {
+    return undefined;
+  }
   switch (watch.event) {
     case "drv_failed":
     case "drv_built": {
@@ -259,7 +264,7 @@ function check(
     }
     case "log_match": {
       if (armed.pending.length === 0) return undefined;
-      if (now - armed.lastReportAt < LOG_MATCH_INTERVAL_MS) return undefined;
+      if (!final && now - armed.lastReportAt < LOG_MATCH_INTERVAL_MS) return undefined;
       const lines = armed.pending;
       const more = armed.pendingTotal - lines.length;
       armed.pending = [];
