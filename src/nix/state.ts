@@ -278,10 +278,6 @@ export class BuildState {
   }
 
   private message(level: number, msg: string, now: number): void {
-    if (level === Verbosity.Error) {
-      this.error(msg, now);
-      return;
-    }
     const evaluating = EVALUATING_FILE.exec(msg);
     if (evaluating) {
       this.evaluation.files++;
@@ -297,12 +293,15 @@ export class BuildState {
       return;
     }
     const listed = this.listing && LISTED_PATH.exec(msg);
-    if (!listed) {
-      this.listing = undefined;
+    if (listed) {
+      if (this.listing === "builds") this.build(listed[1], true);
+      else this.transfer(listed[1], "download");
       return;
     }
-    if (this.listing === "builds") this.build(listed[1], true);
-    else this.transfer(listed[1], "download");
+    this.listing = undefined;
+    if (level === Verbosity.Error) {
+      this.error(msg, now);
+    }
   }
 
   private error(msg: string, now: number): void {
