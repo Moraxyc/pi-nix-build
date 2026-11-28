@@ -1,8 +1,69 @@
 import { readFile } from "node:fs/promises";
+import { dedupe } from "../format.ts";
 
 /** An `inputDrvs` entry in a .drv file: `("/nix/store/…-foo.drv",["out"])`, or `(…,(…))` with dynamic derivations. */
 const INPUT_DRV = /\("(\/[^"]+\.drv)",[[(]/g;
 const READ_CONCURRENCY = 16;
+
+export interface DrvSubgraph {
+  unique: string[];
+  /** For each drv, the subset of `unique` that directly depend on it. */
+  dependents: Map<string, string[]>;
+  /** Number of distinct known inputs in `unique` for each readable drv. */
+  inDegree: Map<string, number>;
+  readableCount: number;
+}
+
+/** Builds reverse dependency edges and known-input counts within `drvs`. */
+export function buildDrvSubgraph(
+  drvs: readonly string[],
+  inputsOf: (drv: string) => readonly string[] | undefined,
+): DrvSubgraph {
+  const unique = dedupe(drvs);
+  const known = new Set(unique);
+  const dependents = new Map<string, string[]>();
+  const inDegree = new Map<string, number>();
+  let readableCount = 0;
+
+  for (const drv of unique) {
+    const inputs = inputsOf(drv);
+    if (inputs === undefined) continue;
+    readableCount++;
+    const seenInputs = new Set<string>();
+    let count = 0;
+    for (const input of inputs) {
+      if (input === drv || !known.has(input) || seenInputs.has(input)) continue;
+      seenInputs.add(input);
+      count++;
+      const list = dependents.get(input);
+      if (list) list.push(drv);
+      else dependents.set(input, [drv]);
+    }
+    inDegree.set(drv, count);
+  }
+
+  return { unique, dependents, inDegree, readableCount };
+}
+
+/** Derivations in `drvs` that no other derivation in `drvs` depends on. */
+export function topLevelDrvs(
+  drvs: readonly string[],
+  inputsOf: (drv: string) => readonly string[] | undefined,
+  subgraph?: DrvSubgraph,
+): string[] {
+  const graph = subgraph ?? buildDrvSubgraph(drvs, inputsOf);
+  return graph.unique.filter((drv) => (graph.dependents.get(drv)?.length ?? 0) === 0);
+}
+
+/** Reads `inputDrvs` paths straight from a local `.drv` file; returns `undefined` if unreadable. */
+export async function readDrvInputPaths(drvPath: string): Promise<string[] | undefined> {
+  try {
+    const text = await readFile(drvPath, "utf8");
+    return Array.from(text.matchAll(INPUT_DRV), (match) => match[1]);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Input derivations read straight from .drv files, which needs neither nix-command nor a Nix
@@ -46,15 +107,10 @@ export class DependencyGraph {
     while (this.reading < READ_CONCURRENCY && this.queue.length > 0) {
       const drv = this.queue.shift() as string;
       this.reading++;
-      readFile(drv, "utf8")
-        .then(
-          (text) =>
-            this.inputs.set(
-              drv,
-              Array.from(text.matchAll(INPUT_DRV), (match) => match[1]),
-            ),
-          () => this.inputs.set(drv, []),
-        )
+      readDrvInputPaths(drv)
+        .then((inputs) => {
+          if (inputs !== undefined) this.inputs.set(drv, inputs);
+        })
         .finally(() => {
           this.reading--;
           this.onLoad();

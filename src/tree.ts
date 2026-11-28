@@ -1,3 +1,5 @@
+import { buildDrvSubgraph } from "./nix/graph.ts";
+
 export interface TreeNode {
   drv: string;
   children: TreeNode[];
@@ -12,16 +14,7 @@ export function dependencyForest(
   inputsOf: (drv: string) => readonly string[] | undefined,
   keep: (drv: string) => boolean,
 ): TreeNode[] {
-  const known = new Set(drvs);
-  const dependents = new Map<string, string[]>();
-  for (const drv of drvs) {
-    for (const input of inputsOf(drv) ?? []) {
-      if (!known.has(input)) continue;
-      const list = dependents.get(input);
-      if (list) list.push(drv);
-      else dependents.set(input, [drv]);
-    }
-  }
+  const { dependents } = buildDrvSubgraph(drvs, inputsOf);
 
   const kept = new Set<string>();
   const pending = drvs.filter(keep);
