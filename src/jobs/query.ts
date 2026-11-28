@@ -7,7 +7,7 @@ export function resolveBuild(state: BuildState, drv: string | undefined, jobId?:
   const builds = [...state.builds.values()];
   if (builds.length === 0) throw new Error(`${prefix}no derivations yet.`);
 
-  if (drv === undefined) {
+  if (!drv) {
     if (builds.length === 1) return builds[0];
     const failed = builds.filter((build) => build.status === "failed");
     if (failed.length === 1) return failed[0];

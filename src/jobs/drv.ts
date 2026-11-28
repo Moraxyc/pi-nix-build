@@ -66,7 +66,7 @@ export function formatDrvInspection(
   options: InspectDrvOptions = {},
 ): string {
   const attrs = collectDrvAttrs(drv);
-  if (options.pattern !== undefined) {
+  if (options.pattern !== undefined && options.pattern !== null) {
     return formatAttrSearch(attrs, drvPath, options);
   }
 

@@ -158,23 +158,20 @@ export class WatchSet {
 }
 
 export function describeWatch(watch: Watch): string {
+  const match = watch.match ?? undefined;
+  const minutes = watch.minutes ?? undefined;
   const target =
-    watch.match === undefined
-      ? ""
-      : ` ${watch.regex ? "/" : '"'}${watch.match}${watch.regex ? "/" : '"'}`;
+    match === undefined ? "" : ` ${watch.regex ? "/" : '"'}${match}${watch.regex ? "/" : '"'}`;
   const detail =
-    watch.event === "progress"
-      ? ` ${watch.percent}%`
-      : watch.minutes !== undefined
-        ? ` ${watch.minutes}m`
-        : "";
+    watch.event === "progress" ? ` ${watch.percent}%` : minutes !== undefined ? ` ${minutes}m` : "";
   const repeat = watch.repeat ? " repeat" : "";
   return `${watch.event}${target}${detail}${repeat} → ${watch.on ?? "turn"}`;
 }
 
 function arm(watch: Watch, now: number): Armed {
   const needs = (field: keyof Watch, events: readonly Watch["event"][]) => {
-    if (events.includes(watch.event) && watch[field] === undefined) {
+    const value = watch[field] ?? undefined;
+    if (events.includes(watch.event) && value === undefined) {
       throw new Error(`A ${watch.event} watch needs ${field}.`);
     }
   };
@@ -182,8 +179,8 @@ function arm(watch: Watch, now: number): Armed {
   needs("percent", ["progress"]);
   needs("match", ["log_match"]);
   let test: (text: string) => boolean = () => true;
-  if (watch.match !== undefined) {
-    const { match } = watch;
+  const match = watch.match ?? undefined;
+  if (match !== undefined) {
     if (watch.regex) {
       const pattern = new RegExp(match);
       test = (text) => pattern.test(text);

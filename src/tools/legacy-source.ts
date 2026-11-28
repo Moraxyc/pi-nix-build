@@ -24,19 +24,14 @@ export interface LegacySource {
 }
 
 export function isLegacySource(params: LegacySource): boolean {
-  return params.file !== undefined || params.expr !== undefined || !!params.attrs?.length;
+  return Boolean(params.file || params.expr || params.attrs?.length);
 }
 
 /** `-E expr` or the file, then one `-A` per attribute path. */
 export function legacySourceArgs(params: LegacySource): string[] {
-  if (params.file !== undefined && params.expr !== undefined) {
+  if (params.file && params.expr) {
     throw new Error("Pass either file or expr, not both.");
   }
-  const source =
-    params.expr !== undefined
-      ? ["-E", params.expr]
-      : params.file !== undefined
-        ? [params.file]
-        : [];
+  const source = params.expr ? ["-E", params.expr] : params.file ? [params.file] : [];
   return [...source, ...(params.attrs ?? []).flatMap((attr) => ["-A", attr])];
 }

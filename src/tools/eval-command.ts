@@ -37,7 +37,7 @@ export type EvalParams = Static<typeof evalParameters>;
  */
 export function evalCommand(params: EvalParams): BuildCommand {
   const legacy = isLegacySource(params);
-  if (legacy && params.installable !== undefined) {
+  if (legacy && params.installable) {
     throw new Error(
       "Pass either installable (nix eval) or file/expr/attrs (nix-instantiate), not both.",
     );
@@ -48,11 +48,11 @@ export function evalCommand(params: EvalParams): BuildCommand {
 
   if (!legacy) {
     const { installable } = params;
-    if (installable === undefined) {
+    if (!installable) {
       throw new Error("Pass installable (nix eval) or file/expr/attrs (nix-instantiate).");
     }
     const output = format === "json" ? ["--json"] : format === "raw" ? ["--raw"] : [];
-    const apply = params.apply !== undefined ? ["--apply", params.apply] : [];
+    const apply = params.apply ? ["--apply", params.apply] : [];
     return {
       program: "nix",
       args: ["eval", installable, ...output, ...apply, ...extra],
@@ -62,7 +62,7 @@ export function evalCommand(params: EvalParams): BuildCommand {
     };
   }
 
-  if (params.apply !== undefined) {
+  if (params.apply) {
     throw new Error("apply needs installable; with expr, apply the function in the expression.");
   }
   if (format === "raw") {

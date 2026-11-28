@@ -25,31 +25,32 @@ export interface QueryResult {
 /** Filters or slices builder log lines with 1-based line numbers and byte-bounded output. */
 export function queryLines(lines: readonly string[], query: Omit<LogQuery, "drv">): QueryResult {
   const limit = query.limit ?? DEFAULT_LOG_LIMIT;
+  const offset = query.offset ?? undefined;
+  const pattern = query.pattern ?? undefined;
   const total = lines.length;
   if (total === 0) return { summary: "0 lines", body: "" };
-  if (query.offset !== undefined && query.offset > total) {
-    return { summary: `offset ${query.offset} is past end of log (${total} lines)`, body: "" };
+  if (offset !== undefined && offset > total) {
+    return { summary: `offset ${offset} is past end of log (${total} lines)`, body: "" };
   }
 
-  if (query.pattern !== undefined) {
-    return searchLines(lines, query.pattern, {
+  if (pattern !== undefined) {
+    return searchLines(lines, pattern, {
       regex: query.regex,
       ignoreCase: query.ignoreCase,
       context: query.context ?? 0,
-      offset: query.offset,
+      offset,
       limit,
     });
   }
 
-  const start = query.offset !== undefined ? query.offset - 1 : Math.max(0, total - limit);
-  const end = query.offset !== undefined ? Math.min(total, start + limit) : total;
+  const start = offset !== undefined ? offset - 1 : Math.max(0, total - limit);
+  const end = offset !== undefined ? Math.min(total, start + limit) : total;
   const formatted = lines.slice(start, end).map((line, i) => `${start + i + 1}: ${line}`);
-  const cut = boundOutput(formatted, query.offset !== undefined ? "head" : "tail");
-  const shownStart =
-    query.offset !== undefined ? start + 1 : Math.max(1, end - cut.outputLines + 1);
-  const shownEnd = query.offset !== undefined ? start + cut.outputLines : end;
+  const cut = boundOutput(formatted, offset !== undefined ? "head" : "tail");
+  const shownStart = offset !== undefined ? start + 1 : Math.max(1, end - cut.outputLines + 1);
+  const shownEnd = offset !== undefined ? start + cut.outputLines : end;
   const more =
-    query.offset !== undefined && shownEnd < total
+    offset !== undefined && shownEnd < total
       ? ` (${total - shownEnd} more; offset: ${shownEnd + 1})`
       : "";
   return { summary: `lines ${shownStart}-${shownEnd} of ${total}${more}`, body: cut.content };

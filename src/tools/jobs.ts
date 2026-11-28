@@ -105,7 +105,7 @@ export function registerJobsTool(pi: ExtensionAPI, jobs: JobManager): void {
           all.length > 0 ? all.map((job) => jobLine(job, now)).join("\n") : "No Nix jobs.",
         );
       }
-      if (params.job === undefined) throw new Error(`${params.action} needs a job id.`);
+      if (!params.job) throw new Error(`${params.action} needs a job id.`);
       const job = jobs.get(params.job);
       switch (params.action) {
         case "status":
